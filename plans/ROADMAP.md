@@ -1,11 +1,12 @@
-# Roadmap: {{PROJECT_NAME}}
+# Roadmap: Code Coverage Experiment
 
-> **Created**: {{DATETIME}}
-> **Status**: Not started
+> **Created**: 2026-03-01
+> **Last updated**: 2026-03-01
+> **Status**: Stage 1 in progress (Steps 1.0–1.2 complete)
 
 ## Overview
 
-Implementation roadmap for the {{PROJECT_NAME}} experiment.
+Grow a code coverage improvement agent through 4 variants across 5 Spring Getting Started guides. Demonstrate that knowledge injection > prompt engineering > model choice.
 
 ---
 
@@ -13,84 +14,132 @@ Implementation roadmap for the {{PROJECT_NAME}} experiment.
 
 ### Step 1.0: Design Review
 
-**Entry criteria**:
-- [ ] Read: `plans/VISION-TEMPLATE.md`
-- [ ] Read: `plans/DESIGN-TEMPLATE.md`
+**Status**: Complete (scaffolded by `markpollack/forge`)
 
-**Work items**:
-- [ ] REVIEW design for completeness
-- [ ] FILL IN domain-specific sections
-- [ ] RENAME templates to remove `-TEMPLATE` suffix
+**Deliverables**: VISION.md, DESIGN.md, ROADMAP.md populated with domain content. Project compiles.
 
-**Exit criteria**:
-- [ ] VISION.md and DESIGN.md populated with domain content
-- [ ] Create: `plans/learnings/step-1.0-design-review.md`
-- [ ] COMMIT
+---
 
 ### Step 1.1: Implement AgentInvoker
 
-**Entry criteria**:
-- [ ] Step 1.0 complete
+**Status**: Complete
 
-**Work items**:
-- [ ] RENAME `TemplateAgentInvoker` to `{{Domain}}AgentInvoker`
-- [ ] IMPLEMENT domain-specific agent invocation logic
-- [ ] WIRE UP AgentClient with appropriate model
+**Deliverables**: `CodeCoverageAgentInvoker` — measures baseline/final JaCoCo coverage, invokes agent via AgentClient, enriches metadata for judges.
 
-**Exit criteria**:
-- [ ] AgentInvoker compiles and passes basic test
-- [ ] Create: `plans/learnings/step-1.1-agent-invoker.md`
-- [ ] COMMIT
+---
 
-### Step 1.2: Configure Judges
+### Step 1.2: Write Prompts and Knowledge
 
-**Entry criteria**:
-- [ ] Step 1.1 complete
+**Status**: Complete
 
-**Work items**:
-- [ ] CONFIGURE deterministic judges (build, preservation)
-- [ ] IMPLEMENT domain-specific judges (if any)
-- [ ] WIRE UP JuryFactory with correct tier policies
+**Deliverables**: 3 prompt files (v0-naive, v1-hardened, v2-with-kb), 4 knowledge files (coverage-fundamentals, jacoco-patterns, spring-test-slices, common-gaps), experiment-config.yaml with 4 variants.
 
-**Exit criteria**:
-- [ ] Jury builds and judges a mock context
-- [ ] Create: `plans/learnings/step-1.2-judges.md`
-- [ ] COMMIT
+---
 
-### Step 1.3: Populate Dataset
+### Step 1.3: Populate and Verify Dataset
 
 **Entry criteria**:
-- [ ] Step 1.2 complete
+- [x] Steps 1.0–1.2 complete
 
 **Work items**:
-- [ ] POPULATE `dataset/items.yaml` with benchmark items
-- [ ] VERIFY each dataset item builds and tests pass
-- [ ] CONFIGURE workspace materialization
+- [ ] CLONE 5 Spring guide repos into dataset/workspaces/
+- [ ] VERIFY each guide's `complete/` subdirectory compiles: `mvn clean compile`
+- [ ] VERIFY existing tests pass: `mvn test`
+- [ ] CONFIGURE workspace materialization (git clone per item)
 
 **Exit criteria**:
-- [ ] All dataset items resolve and build
+- [ ] All 5 dataset items resolve and build
 - [ ] Create: `plans/learnings/step-1.3-dataset.md`
+- [ ] COMMIT
+
+---
+
+### Step 1.4: Implement TestQualityJudge (Tier 3)
+
+**Entry criteria**:
+- [ ] Step 1.3 complete
+
+**Work items**:
+- [ ] IMPLEMENT `TestQualityJudge` — LLM-driven judge evaluating BDD semantics, meaningful assertions, proper test naming
+- [ ] WIRE UP in JuryFactory at Tier 3 with FINAL_TIER policy
+- [ ] WRITE unit test with mock LLM response
+
+**Exit criteria**:
+- [ ] TestQualityJudge compiles and passes basic test
+- [ ] Create: `plans/learnings/step-1.4-test-quality-judge.md`
 - [ ] COMMIT
 
 ---
 
 ## Stage 2: Variant Execution
 
-### Step 2.0: Write Prompts and Knowledge
+### Step 2.0: Run Control Variant
+
+**Entry criteria**:
+- [ ] Stage 1 complete
 
 **Work items**:
-- [ ] WRITE prompt files for each variant
-- [ ] WRITE knowledge files
-- [ ] CONFIGURE variant specs in experiment-config.yaml
-
-### Step 2.1: Run Variants
-
-**Work items**:
-- [ ] RUN all variants: `--run-all-variants`
-- [ ] REVIEW growth story output
-- [ ] ANALYZE results
+- [ ] RUN control variant (v0-naive, no KB) on all 5 guides
+- [ ] VERIFY results are stored correctly
+- [ ] REVIEW baseline growth story
 
 **Exit criteria**:
-- [ ] `analysis/growth-story.md` generated with all variants
+- [ ] Control results in results/ directory
+- [ ] Baseline coverage numbers recorded
+- [ ] COMMIT
+
+---
+
+### Step 2.1: Run All Variants
+
+**Entry criteria**:
+- [ ] Step 2.0 complete
+
+**Work items**:
+- [ ] RUN variant-a (v1-hardened, no KB)
+- [ ] RUN variant-b (v2-with-kb, 3 KB files)
+- [ ] RUN variant-c (v2-with-kb, 4 KB files)
+- [ ] GENERATE growth story with all variant comparisons
+
+**Exit criteria**:
+- [ ] `analysis/growth-story.md` generated with all 4 variants
+- [ ] Coverage improvement data validates hypothesis (KB > prompt > baseline)
 - [ ] Create: `plans/learnings/step-2.1-results.md`
 - [ ] COMMIT
+
+---
+
+## Stage 3: Analysis and Graduation
+
+### Step 3.0: Analyze Results
+
+**Work items**:
+- [ ] ANALYZE growth story for patterns
+- [ ] IDENTIFY which knowledge file had most impact
+- [ ] DOCUMENT findings in `analysis/` directory
+
+### Step 3.1: Graduate Best Variant
+
+**Work items**:
+- [ ] EXTRACT best variant → standalone agent project
+- [ ] PACKAGE for ACP marketplace (deferred)
+
+---
+
+## Learnings Structure
+
+```
+plans/learnings/
+├── step-1.3-dataset.md
+├── step-1.4-test-quality-judge.md
+├── step-2.0-control.md
+└── step-2.1-results.md
+```
+
+---
+
+## Revision History
+
+| Timestamp | Change | Trigger |
+|-----------|--------|---------|
+| 2026-03-01 | Initial — Steps 1.0-1.2 complete via forge bootstrapping session | Genesis session |
