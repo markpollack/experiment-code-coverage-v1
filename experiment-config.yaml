@@ -1,0 +1,27 @@
+experimentName: code-coverage-experiment
+defaultModel: claude-haiku-4-5-20251001
+timeoutMinutes: 15
+variants:
+  - name: control
+    promptFile: v0-naive.txt
+    knowledgeDir: null
+    knowledgeFiles: []
+  - name: variant-a
+    promptFile: v1-hardened.txt
+    knowledgeDir: null
+    knowledgeFiles: []
+  - name: variant-b
+    promptFile: v2-with-kb.txt
+    knowledgeDir: knowledge
+    knowledgeFiles:
+      - coverage-fundamentals.md
+      - jacoco-patterns.md
+      - spring-test-slices.md
+  - name: variant-c
+    promptFile: v2-with-kb.txt
+    knowledgeDir: knowledge
+    knowledgeFiles:
+      - coverage-fundamentals.md
+      - jacoco-patterns.md
+      - spring-test-slices.md
+      - common-gaps.md
