@@ -39,25 +39,25 @@ Tier 0–2 judges are "off the shelf" from `agent-judge-exec`. Tier 3 (`TestQual
 
 ### TestQualityJudge: Fixed Quality Bar from KB
 
-The judge uses a **single prompt derived from the knowledge base**, applied identically to all variants. The KB is the single source of truth for what "good" looks like — the judge prompt is a projection of that KB into evaluation criteria.
+The judge uses a **single fixed prompt** (`prompts/judge-quality.txt`), applied identically to all variants. The prompt was authored by reading the KB and distilling best practices into concrete evaluation criteria. It is a static artifact — the judge does NOT read the KB at runtime.
 
 ```
 Knowledge base (source of truth)
-    ↓ generates (once)           ↓ subset per variant
-Judge prompt                   Agent KB files (knowledge/)
-(full KB, fixed bar)           (progressively more per variant)
-    ↓ applied to all variants      ↓
-Scores ←──────────────────── Agent output
+    ↓ author reads, distills (once)    ↓ subset per variant
+Judge prompt                          Agent KB files (knowledge/)
+(static file, fixed bar)             (progressively more per variant)
+    ↓ same for all variants               ↓
+Scores ←─────────────────────────── Agent output
 ```
 
-The judge gets the full KB's perspective. The agent gets a progressively larger slice. The delta between variants measures how much of the KB the agent could apply with the resources it was given.
+The judge prompt encodes the full KB's perspective as a fixed quality bar. The agent gets a progressively larger slice of the KB at runtime. The delta between variants measures how much of the quality bar the agent could reach with the resources it was given.
 
 **Why fixed, not adaptive per-variant:** The judge is the target; the variants are different attempts to hit it. A fixed bar means:
 - The audience understands the evaluation ("same bar for everyone")
 - The LLM's built-in knowledge is rewarded, not penalized
 - The growth story shows what knowledge injection *added on top of* what the model already knew
 
-**Why derived from KB, not hardcoded:** The judge criteria evolve as the KB evolves. Add JPA testing best practices to the KB → the judge starts scoring for that. No code change needed. The `TestQualityJudge` implementation is generic — it takes a prompt as input. The prompt is the artifact that carries domain knowledge.
+**Why a static prompt, not runtime KB navigation:** A judge that reads the KB at runtime is non-deterministic — different reads could yield different criteria and scores across runs. The judge prompt is a versioned artifact. If the KB evolves between experiment cycles, the judge prompt is updated as a deliberate step, not automatically. The `TestQualityJudge` implementation is generic — it takes the prompt file path as input.
 
 **Implementation:** Agent-based (uses `ClaudeAgentModel` with read-only tools: `Read`, `Glob`, `Grep`) to navigate `src/main/` and `src/test/`. Returns JSON with per-criterion scores and evidence strings. Final score is weighted average → `NumericalScore.normalized()`.
 

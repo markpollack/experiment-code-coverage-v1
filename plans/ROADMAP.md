@@ -97,9 +97,9 @@ Grow a code coverage improvement agent through 4 variants across 5 Spring Gettin
 
 **Design decisions** (from reviews v1–v4 + owner input):
 
-*Judge philosophy — fixed quality bar derived from KB (v5, supersedes v1–v4):*
-- **Judge prompt derived from the knowledge base, applied identically to all variants.** The KB is the single source of truth for what "good" looks like. The judge prompt is a projection of the full KB into evaluation criteria. The `TestQualityJudge` code is generic — it takes the prompt as input, not hardcoded criteria.
-- **Criteria come from the KB, not from code.** As the KB evolves (add JPA best practices, Boot 4 idioms, etc.), the judge criteria evolve automatically. No code change needed.
+*Judge philosophy — fixed quality bar (v5, supersedes v1–v4):*
+- **One fixed judge prompt (`prompts/judge-quality.txt`), applied identically to all variants.** Authored by reading the full KB and distilling best practices into concrete evaluation criteria. Static artifact — the judge does NOT read the KB at runtime.
+- **Criteria come from the KB authorship, not from code.** The `TestQualityJudge` code is generic — it takes the prompt file path as input. If the KB evolves between experiment cycles, the judge prompt is updated as a deliberate versioned step.
 - **Rewards built-in LLM knowledge**: if the model already knows `@WebMvcTest` without KB injection, it scores. The growth story shows what knowledge adds *on top of* what the model already knows.
 - **KB is a forkable policy layer**: the experiment validates the mechanism (does KB injection produce measurable adherence?), not the opinions. Any team can fork the KB and get a matching judge.
 - **Diagnostic feedback**: judge evidence strings map to improvement levers (knowledge gap, orchestration gap, tool gap, model gap) per the refactoring-agent `AIAnalyzer` pattern.
@@ -122,21 +122,29 @@ Grow a code coverage improvement agent through 4 variants across 5 Spring Gettin
 
 **Work items**:
 - [x] CHECK `ClaudeAgentOptions` for timeout config and read-only/restricted mode — confirmed: `timeout(Duration)`, `allowedTools(List)`, `disallowedTools(List)`, `yolo(boolean)`
+- [ ] WRITE judge prompt (`prompts/judge-quality.txt`):
+  - Author reads the full KB and distills best practices into fixed evaluation criteria
+  - The prompt is a static artifact — the judge does NOT read the KB at runtime
+  - Include concrete criteria with scoring rubric (what scores 0.2 vs 0.8)
+  - Constrain output to JSON with per-criterion scores + evidence strings
+  - Same prompt for all variants, all runs — the fixed quality bar
+  - If the KB evolves between experiment cycles, update the judge prompt as a deliberate versioned step
 - [ ] IMPLEMENT `TestQualityJudge` implementing `Judge` directly:
-  - Constructor takes agent factory (functional interface), pass threshold
+  - Constructor takes agent factory (functional interface), judge prompt path, pass threshold
   - `judge()`: copy workspace to temp dir for isolation
   - Check for test files; if none → `Judgment.fail()` score 0.0
-  - Build evaluation goal prompt with JSON-only output constraint
+  - Load judge prompt, invoke agent with JSON-only output constraint
   - Invoke agent synchronously (try/catch), use agent-level timeout if available
   - Parse outermost `{...}` from agent output, clamp scores to [0.0, 1.0]
   - Compute weighted average → `NumericalScore.normalized()`
   - Return `Judgment` with `Check` entries per criterion, raw scores in metadata
   - Error handling: agent failure or unparseable output → `Judgment.error()`
   - Clean up temp workspace copy
+  - Judge code is generic — criteria are in the prompt file, not in Java
 - [ ] WIRE UP `JuryFactory` to accept agent factory, register `TestQualityJudge` at Tier 3 with `FINAL_TIER` policy
 - [ ] WRITE unit test `TestQualityJudgeTest`:
   - Mock agent factory → wire full fluent chain (`goal().workingDirectory().run()`)
-  - Verify correct score computation (3 criteria, equal weight)
+  - Verify correct score computation (criteria from mock agent JSON response)
   - Verify no-test-files → FAIL with score 0.0
   - Verify malformed agent output → ERROR (not uncaught exception)
   - Verify agent exception → ERROR
