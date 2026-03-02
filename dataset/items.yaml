@@ -1,0 +1,37 @@
+items:
+  - id: "gs-rest-service"
+    slug: "gs-rest-service"
+    task: "Improve test coverage to 80% line coverage"
+    source: "https://github.com/spring-guides/gs-rest-service"
+    subdirectory: "complete"
+    knowledgeRefs: []
+  - id: "gs-accessing-data-jpa"
+    slug: "gs-accessing-data-jpa"
+    task: "Improve test coverage to 80% line coverage"
+    source: "https://github.com/spring-guides/gs-accessing-data-jpa"
+    subdirectory: "complete"
+    knowledgeRefs: []
+  - id: "gs-securing-web"
+    slug: "gs-securing-web"
+    task: "Improve test coverage to 80% line coverage"
+    source: "https://github.com/spring-guides/gs-securing-web"
+    subdirectory: "complete"
+    knowledgeRefs: []
+  - id: "gs-reactive-rest-service"
+    slug: "gs-reactive-rest-service"
+    task: "Improve test coverage to 80% line coverage"
+    source: "https://github.com/spring-guides/gs-reactive-rest-service"
+    subdirectory: "complete"
+    knowledgeRefs: []
+  - id: "gs-messaging-stomp-websocket"
+    slug: "gs-messaging-stomp-websocket"
+    task: "Improve test coverage to 80% line coverage"
+    source: "https://github.com/spring-guides/gs-messaging-stomp-websocket"
+    subdirectory: "complete"
+    knowledgeRefs: []
+  - id: "spring-petclinic"
+    slug: "spring-petclinic"
+    task: "Improve test coverage to 80% line coverage"
+    source: "https://github.com/spring-projects/spring-petclinic"
+    subdirectory: "."
+    knowledgeRefs: []

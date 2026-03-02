@@ -1,0 +1,76 @@
+experimentName: code-coverage-experiment
+defaultModel: claude-sonnet-4-6
+timeoutMinutes: 45
+variants:
+  - name: control
+    promptFile: v0-naive.txt
+    knowledgeDir: null
+    knowledgeFiles: []
+  - name: variant-a
+    promptFile: v1-hardened.txt
+    knowledgeDir: null
+    knowledgeFiles: []
+  - name: variant-b
+    promptFile: v2-with-kb.txt
+    knowledgeDir: knowledge
+    knowledgeFiles:
+      - coverage-mechanics/coverage-fundamentals.md
+      - coverage-mechanics/jacoco-patterns.md
+      - coverage-mechanics/spring-test-slices.md
+  - name: variant-c
+    promptFile: v2-with-kb.txt
+    knowledgeDir: knowledge
+    knowledgeFiles:
+      - index.md
+  - name: variant-d
+    promptFile: v3-explore.txt
+    actPromptFile: v3-act.txt
+    knowledgeDir: knowledge
+    knowledgeFiles:
+      - index.md
+  - name: variant-e
+    promptFile: v4-forge-plan.txt
+    actPromptFile: v4-forge-act.txt
+    knowledgeDir: knowledge
+    knowledgeFiles:
+      - index.md
+  - name: claude-haiku
+    model: claude-haiku-4-5-20251001
+    promptFile: v1-hardened.txt
+    knowledgeDir: null
+    knowledgeFiles: []
+  - name: loopy-haiku
+    agent: loopy
+    model: claude-haiku-4-5-20251001
+    promptFile: v1-hardened.txt
+    knowledgeDir: null
+    knowledgeFiles: []
+  - name: claude-haiku-sae
+    model: claude-haiku-4-5-20251001
+    promptFile: v1-hardened-sae.txt
+    knowledgeDir: null
+    knowledgeFiles: []
+  - name: loopy-haiku-sae
+    agent: loopy
+    model: claude-haiku-4-5-20251001
+    promptFile: v1-hardened-sae.txt
+    knowledgeDir: null
+    knowledgeFiles: []
+  - name: claude-sonnet-sae
+    promptFile: v1-hardened-sae.txt
+    knowledgeDir: null
+    knowledgeFiles: []
+  - name: loopy-sonnet
+    agent: loopy
+    model: claude-sonnet-4-6
+    promptFile: v1-hardened.txt
+    knowledgeDir: null
+    knowledgeFiles: []
+  - name: loopy-qwen3-coder
+    agent: loopy
+    model: qwen/qwen3-coder-30b
+    baseUrl: http://rutherford:1234
+    apiKey: lm-studio
+    promptFile: v1-hardened-qwen.txt
+    knowledgeDir: null
+    knowledgeFiles: []
