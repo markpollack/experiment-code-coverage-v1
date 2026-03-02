@@ -47,7 +47,7 @@ ExperimentApp → ExperimentRunner → CodeCoverageAgentInvoker → CascadedJury
 | 0 | BuildSuccessJudge | agent-judge-exec | REJECT_ON_ANY_FAIL |
 | 1 | CoveragePreservationJudge | agent-judge-exec | REJECT_ON_ANY_FAIL |
 | 2 | CoverageImprovementJudge | agent-judge-exec | ACCEPT_ON_ALL_PASS |
-| 3 | TestQualityJudge | custom (LLM-driven) | FINAL_TIER |
+| 3 | TestQualityJudge | custom (agent-based via AgentClient) | FINAL_TIER |
 
 ### Variants
 
