@@ -2,11 +2,13 @@
 
 > **Created**: 2026-03-01
 > **Last updated**: 2026-03-01
-> **Status**: Stage 1 in progress (Steps 1.0–1.2 complete)
+> **Status**: Stage 1 in progress (Steps 1.0–1.3 complete, Prereq 1.4a complete)
 
 ## Overview
 
-Grow a code coverage improvement agent through 4 variants across 5 Spring Getting Started guides. Demonstrate that knowledge injection > prompt engineering > model choice.
+Grow a code coverage improvement agent through 4 variants across 5 Spring Getting Started guides. Demonstrate that knowledge injection > prompt engineering > model choice. Stage 1 builds all infrastructure (invoker, judges, dataset). Stage 2 runs variants and collects data. Stage 3 analyzes results.
+
+> **Before every commit**: Verify ALL exit criteria for the current step are met. Do NOT remove exit criteria to mark a step complete — fulfill them.
 
 ---
 
@@ -38,6 +40,8 @@ Grow a code coverage improvement agent through 4 variants across 5 Spring Gettin
 
 ### Step 1.3: Populate and Verify Dataset
 
+**Status**: Complete
+
 **Entry criteria**:
 - [x] Steps 1.0–1.2 complete
 
@@ -50,24 +54,125 @@ Grow a code coverage improvement agent through 4 variants across 5 Spring Gettin
 **Exit criteria**:
 - [x] All 5 dataset items resolve and build
 - [x] Create: `plans/learnings/step-1.3-dataset.md`
-- [ ] COMMIT
+- [x] COMMIT
+
+**Deliverables**: 5 verified dataset items with `dataset.json` manifest, `materialize.sh` script.
+
+---
+
+### Step 1.4a: Promote agent-journal and Wire Exhaust Capture (Prerequisite)
+
+**Status**: Complete
+
+**Rationale**: TestQualityJudge (Step 1.4) needs a full audit trail from its agent-based evaluation — tool calls, thinking blocks, cost, tokens. Three upstream gaps were blocking this:
+1. Execution ledger (`tuvium-runtime-core`) was stuck under private `ai.tuvium` coordinates
+2. Claude SDK capture bridge was buried inside `refactoring-agent`
+3. `ClaudeAgentModel.call()` discarded everything except assistant text
+
+**Work completed**:
+- [x] Created `markpollack/agent-journal` repo (BSL licensed)
+- [x] Migrated + repackaged `ai.tuvium:tracking-core` → `io.github.markpollack:journal-core` (279 tests)
+- [x] Promoted `claude-sdk-capture` → `claude-code-capture` module in agent-journal (28 tests)
+- [x] Added `Consumer<ParsedMessage> messageListener` to `ClaudeAgentModel` (all 3 consumption paths)
+- [x] Pushed to `spring-ai-community/agent-client` main (compile-scope dependency, not test-only)
+- [x] Updated `refactoring-agent` imports/deps to new coordinates
+- [x] Added journal-core + claude-code-capture to this project's pom.xml
+- [x] E2E integration test verified: thinking blocks, tool calls, tokens, cost all captured through full pipeline
+
+**Artifacts installed locally**:
+- `io.github.markpollack:journal-core:0.1.0-SNAPSHOT`
+- `io.github.markpollack:claude-code-capture:0.1.0-SNAPSHOT`
+- `org.springaicommunity.agents:spring-ai-claude-agent:0.10.0-SNAPSHOT` (with messageListener)
 
 ---
 
 ### Step 1.4: Implement TestQualityJudge (Tier 3)
 
 **Entry criteria**:
-- [ ] Step 1.3 complete
+- [x] Step 1.3 complete
+- [x] Step 1.4a complete (agent-journal + messageListener available)
+- [ ] Read: `plans/learnings/step-1.3-dataset.md` — prior step learnings
+- [ ] Read: `plans/inbox/design-review.md` — reviewer feedback
+- [ ] Read: `plans/JOURNAL.md` — critical insight on agent-based judge approach
+
+**Design decisions** (from reviews v1 + v2 + v3 + owner input):
+- Agent-based judge (not `LLMJudge`): uses `AgentClient`/`ClaudeAgentModel` for filesystem navigation
+- No `agent-judge-llm` dependency needed — reuse existing `spring-ai-agent-client` + `spring-ai-claude-agent`
+- 2 evaluation criteria (dropped naming as subjective):
+  - **Meaningful assertions** (weight 0.5): checking real behavior, not `assertTrue(true)`
+  - **Exception/edge-case coverage** (weight 0.5): nulls, boundaries, error paths tested
+- Agent navigates to production source; prompt says "if no direct counterpart, evaluate against all production classes in src/main/"
+- `NumericalScore.normalized()` (continuous 0-1) for gradient in analysis
+- Pass threshold configurable (constructor param, default 0.5)
+- Use stronger model for judging than experiment agent (configurable via `AgentModel` injection)
+- Timeout: use `ClaudeAgentOptions.timeout(Duration.ofMinutes(3))` — confirmed native support, default 10 min (no CompletableFuture)
+- Read-only judge: use `allowedTools(List.of("Read", "Glob", "Grep"))` with `yolo(false)` — confirmed in `ClaudeAgentOptions`
+- `workingDirectory` priority: request-level > goal-level > builder default > cwd — set on request only for judge
+- Copy workspace to temp dir before judging — isolate from session files, build artifacts
+- Never ABSTAIN from FINAL_TIER: no test files = `Judgment.fail()` with score 0.0
+- Agent prompt constrains output to JSON-only; parser extracts outermost `{...}` block
+- Accept functional interface for agent creation (testability seam, avoids static factory mocking)
+- Clamp criterion scores to [0.0, 1.0] during parsing
+- **Exhaust capture** (resolved in Step 1.4a): `ClaudeAgentModel.messageListener` → `SessionLogParser` → `PhaseCapture` → `BaseRunRecorder` → journal-core Run events. Full pipeline verified end-to-end.
 
 **Work items**:
-- [ ] IMPLEMENT `TestQualityJudge` — LLM-driven judge evaluating BDD semantics, meaningful assertions, proper test naming
-- [ ] WIRE UP in JuryFactory at Tier 3 with FINAL_TIER policy
-- [ ] WRITE unit test with mock LLM response
+- [x] CHECK `ClaudeAgentOptions` for timeout config and read-only/restricted mode — confirmed: `timeout(Duration)`, `allowedTools(List)`, `disallowedTools(List)`, `yolo(boolean)`
+- [ ] IMPLEMENT `TestQualityJudge` implementing `Judge` directly:
+  - Constructor takes agent factory (functional interface), pass threshold
+  - `judge()`: copy workspace to temp dir for isolation
+  - Check for test files; if none → `Judgment.fail()` score 0.0
+  - Build evaluation goal prompt with JSON-only output constraint
+  - Invoke agent synchronously (try/catch), use agent-level timeout if available
+  - Parse outermost `{...}` from agent output, clamp scores to [0.0, 1.0]
+  - Compute weighted average → `NumericalScore.normalized()`
+  - Return `Judgment` with `Check` entries per criterion, raw scores in metadata
+  - Error handling: agent failure or unparseable output → `Judgment.error()`
+  - Clean up temp workspace copy
+- [ ] WIRE UP `JuryFactory` to accept agent factory, register `TestQualityJudge` at Tier 3 with `FINAL_TIER` policy
+- [ ] WRITE unit test `TestQualityJudgeTest`:
+  - Mock agent factory → wire full fluent chain (`goal().workingDirectory().run()`)
+  - Verify correct score computation (50/50 weighting)
+  - Verify no-test-files → FAIL with score 0.0
+  - Verify malformed agent output → ERROR (not uncaught exception)
+  - Verify agent exception → ERROR
+  - Verify score clamping for out-of-range values
+- [ ] VERIFY: `./mvnw compile` and `./mvnw test` pass
 
 **Exit criteria**:
-- [ ] TestQualityJudge compiles and passes basic test
+- [ ] TestQualityJudge compiles and passes tests
+- [ ] All tests pass: `./mvnw test`
 - [ ] Create: `plans/learnings/step-1.4-test-quality-judge.md`
+- [ ] Update `CLAUDE.md` with distilled learnings
+- [ ] Update `ROADMAP.md` checkboxes
 - [ ] COMMIT
+
+**Deliverables**: `TestQualityJudge.java`, `TestQualityJudgeTest.java`, updated `JuryFactory.java`
+
+---
+
+### Step 1.5: Stage 1 Consolidation and Review
+
+**Entry criteria**:
+- [ ] All Stage 1 steps complete (1.0–1.4)
+- [ ] Read: all `plans/learnings/step-1.*` files from this stage
+
+**Work items**:
+- [ ] COMPACT learnings from all Stage 1 steps into `plans/learnings/LEARNINGS.md`
+  - Key discoveries that changed the approach
+  - Patterns established during implementation
+  - Deviations from design with rationale
+  - Common pitfalls to avoid in future stages
+- [ ] UPDATE `CLAUDE.md` with distilled learnings from the full stage
+- [ ] VERIFY project compiles and all tests pass: `./mvnw clean test`
+
+**Exit criteria**:
+- [ ] `LEARNINGS.md` updated with compacted summary covering Stage 1
+- [ ] Create: `plans/learnings/step-1.5-stage1-summary.md`
+- [ ] Update `CLAUDE.md` with distilled learnings
+- [ ] Update `ROADMAP.md` checkboxes
+- [ ] COMMIT
+
+**Deliverables**: Compacted `LEARNINGS.md`, stage summary, clean `CLAUDE.md`
 
 ---
 
@@ -77,16 +182,24 @@ Grow a code coverage improvement agent through 4 variants across 5 Spring Gettin
 
 **Entry criteria**:
 - [ ] Stage 1 complete
+- [ ] Read: `plans/learnings/LEARNINGS.md` — Stage 1 compacted learnings
+- [ ] Read: `plans/learnings/step-1.5-stage1-summary.md` — stage summary
 
 **Work items**:
 - [ ] RUN control variant (v0-naive, no KB) on all 5 guides
-- [ ] VERIFY results are stored correctly
+- [ ] VERIFY results are stored correctly in results/ directory
 - [ ] REVIEW baseline growth story
+- [ ] RECORD baseline coverage numbers
 
 **Exit criteria**:
 - [ ] Control results in results/ directory
 - [ ] Baseline coverage numbers recorded
+- [ ] Create: `plans/learnings/step-2.0-control.md`
+- [ ] Update `CLAUDE.md` with distilled learnings
+- [ ] Update `ROADMAP.md` checkboxes
 - [ ] COMMIT
+
+**Deliverables**: Control variant results, baseline coverage data
 
 ---
 
@@ -94,6 +207,7 @@ Grow a code coverage improvement agent through 4 variants across 5 Spring Gettin
 
 **Entry criteria**:
 - [ ] Step 2.0 complete
+- [ ] Read: `plans/learnings/step-2.0-control.md` — prior step learnings
 
 **Work items**:
 - [ ] RUN variant-a (v1-hardened, no KB)
@@ -105,7 +219,32 @@ Grow a code coverage improvement agent through 4 variants across 5 Spring Gettin
 - [ ] `analysis/growth-story.md` generated with all 4 variants
 - [ ] Coverage improvement data validates hypothesis (KB > prompt > baseline)
 - [ ] Create: `plans/learnings/step-2.1-results.md`
+- [ ] Update `CLAUDE.md` with distilled learnings
+- [ ] Update `ROADMAP.md` checkboxes
 - [ ] COMMIT
+
+**Deliverables**: All variant results, comparative growth story
+
+---
+
+### Step 2.2: Stage 2 Consolidation
+
+**Entry criteria**:
+- [ ] All Stage 2 steps complete (2.0–2.1)
+- [ ] Read: all `plans/learnings/step-2.*` files from this stage
+
+**Work items**:
+- [ ] COMPACT learnings from Stage 2 into `plans/learnings/LEARNINGS.md`
+- [ ] UPDATE `CLAUDE.md` with distilled learnings
+
+**Exit criteria**:
+- [ ] `LEARNINGS.md` updated with Stage 2 compacted summary
+- [ ] Create: `plans/learnings/step-2.2-stage2-summary.md`
+- [ ] Update `CLAUDE.md` with distilled learnings
+- [ ] Update `ROADMAP.md` checkboxes
+- [ ] COMMIT
+
+**Deliverables**: Updated `LEARNINGS.md` covering Stages 1-2
 
 ---
 
@@ -113,16 +252,44 @@ Grow a code coverage improvement agent through 4 variants across 5 Spring Gettin
 
 ### Step 3.0: Analyze Results
 
+**Entry criteria**:
+- [ ] Stage 2 complete
+- [ ] Read: `plans/learnings/LEARNINGS.md` — compacted learnings through Stage 2
+
 **Work items**:
 - [ ] ANALYZE growth story for patterns
 - [ ] IDENTIFY which knowledge file had most impact
 - [ ] DOCUMENT findings in `analysis/` directory
 
+**Exit criteria**:
+- [ ] Analysis documented in `analysis/`
+- [ ] Create: `plans/learnings/step-3.0-analysis.md`
+- [ ] Update `CLAUDE.md` with distilled learnings
+- [ ] Update `ROADMAP.md` checkboxes
+- [ ] COMMIT
+
+**Deliverables**: Analysis documentation, pattern identification
+
+---
+
 ### Step 3.1: Graduate Best Variant
+
+**Entry criteria**:
+- [ ] Step 3.0 complete
+- [ ] Read: `plans/learnings/step-3.0-analysis.md` — prior step learnings
 
 **Work items**:
 - [ ] EXTRACT best variant → standalone agent project
 - [ ] PACKAGE for ACP marketplace (deferred)
+
+**Exit criteria**:
+- [ ] Best variant extracted
+- [ ] Create: `plans/learnings/step-3.1-graduation.md`
+- [ ] Update `CLAUDE.md` with distilled learnings
+- [ ] Update `ROADMAP.md` checkboxes
+- [ ] COMMIT
+
+**Deliverables**: Standalone agent project from best variant
 
 ---
 
@@ -130,10 +297,48 @@ Grow a code coverage improvement agent through 4 variants across 5 Spring Gettin
 
 ```
 plans/learnings/
-├── step-1.3-dataset.md
+├── LEARNINGS.md                    # Tier 1: Compacted summary
+├── step-1.3-dataset.md             # Tier 2: Per-step details
 ├── step-1.4-test-quality-judge.md
+├── step-1.5-stage1-summary.md
 ├── step-2.0-control.md
-└── step-2.1-results.md
+├── step-2.1-results.md
+├── step-2.2-stage2-summary.md
+├── step-3.0-analysis.md
+└── step-3.1-graduation.md
+```
+
+---
+
+## Conventions
+
+### Commit Convention
+
+Every step ends with a git commit. Use this format:
+
+```
+Step X.Y: Brief description of what was done
+```
+
+### Step Entry Criteria Convention
+
+Every step's entry criteria must include:
+
+```markdown
+- [ ] Previous step complete
+- [ ] Read: `plans/learnings/step-{PREV}-{topic}.md` — prior step learnings
+```
+
+### Step Exit Criteria Convention
+
+Every step's exit criteria must include:
+
+```markdown
+- [ ] All tests pass: `./mvnw test`
+- [ ] Create: `plans/learnings/step-X.Y-topic.md`
+- [ ] Update `CLAUDE.md` with distilled learnings
+- [ ] Update `ROADMAP.md` checkboxes
+- [ ] COMMIT
 ```
 
 ---
@@ -144,3 +349,6 @@ plans/learnings/
 |-----------|--------|---------|
 | 2026-03-01 | Initial — Steps 1.0-1.2 complete via forge bootstrapping session | Genesis session |
 | 2026-03-01 | Step 1.3 complete — dataset populated, verified, materialization configured | Dataset setup session |
+| 2026-03-01 | Upgraded to Forge methodology format, expanded Step 1.4, added consolidation steps | Plan-to-roadmap conversion |
+| 2026-03-01 | Step 1.4 design finalized after 4 review rounds; confirmed ClaudeAgentOptions API (timeout, allowedTools, workingDirectory priority) | Design review v4 sign-off |
+| 2026-03-01 | Step 1.4a complete — agent-journal created, claude-code-capture promoted, messageListener added to ClaudeAgentModel, e2e IT verified | Exhaust capture prerequisite |
