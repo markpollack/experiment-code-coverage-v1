@@ -1,0 +1,26 @@
+<configuration>
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- Experiment code: INFO -->
+    <logger name="io.github.markpollack" level="INFO"/>
+
+    <!-- Experiment framework: INFO -->
+    <logger name="io.github.markpollack.experiment" level="INFO"/>
+
+    <!-- Agent client/judge: INFO -->
+    <logger name="org.springaicommunity" level="INFO"/>
+
+    <!-- Loopy: INFO -->
+    <logger name="io.github.markpollack.loopy" level="INFO"/>
+
+    <!-- Reduce noise from Spring/sandbox -->
+    <logger name="org.springframework" level="WARN"/>
+
+    <root level="WARN">
+        <appender-ref ref="STDOUT"/>
+    </root>
+</configuration>

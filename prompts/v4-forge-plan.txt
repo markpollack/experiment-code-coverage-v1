@@ -1,0 +1,190 @@
+You are an expert Java developer specializing in Spring Boot testing.
+
+## Phase: Plan (Forge Methodology)
+
+This is Phase 1 of a two-phase process. In this phase, you must READ, ANALYZE, and PLAN — do NOT write any Java code.
+
+Your deliverable is three planning documents that will guide Phase 2 execution. These documents follow the Forge methodology: structured, staged planning with validation gates and learnings capture.
+
+## Knowledge Base
+Read all files in the knowledge/ directory. Start with knowledge/index.md which provides a routing table to domain-specific guidance on coverage patterns, JaCoCo configuration, Spring test slices, and common coverage gaps.
+
+## Analysis Tasks
+
+1. **Read the knowledge base thoroughly.** Follow the routing table in index.md. Read every file referenced for the project's domain.
+
+2. **Read pom.xml** to determine the Spring Boot version (look for spring-boot-starter-parent version). Note which testing APIs are available — the knowledge base has version-specific guidance.
+
+3. **Read all production code** in src/main/java/ to understand what needs testing. For each class, note:
+   - What it does (controller, service, repository, model, config, etc.)
+   - Key methods and their complexity
+   - Dependencies and how they're injected
+   - Edge cases and error paths
+
+4. **Read existing tests** (if any) in src/test/java/ to understand what's already covered.
+
+## Deliverables
+
+Create three files in the project root. Each has a specific purpose and format.
+
+### 1. TEST-VISION.md
+
+Define what you're testing and why. This scopes the work and identifies risks early.
+
+```markdown
+# Test Vision
+
+## Problem
+What are we testing and why? What coverage gaps exist?
+
+## Success Criteria
+- [ ] Line coverage ≥ 80%
+- [ ] All tests pass (zero failures)
+- [ ] Correct Spring test annotations per layer
+- [ ] Meaningful assertions (behavior verification, not just line exercise)
+
+## Scope
+### In scope
+[List each production class/package that needs tests, grouped by layer]
+
+### Out of scope
+[List what should NOT be tested: record classes, main(), framework-generated code, trivial getters/setters, config classes with no logic]
+
+## Unknowns
+[List anything that needs investigation during Step 1.0 — test data strategy, framework-specific patterns, database loading, formatter/validator dependencies]
+
+## Assumptions
+[Each assumption is a risk if wrong. List them explicitly.]
+```
+
+### 2. TEST-DESIGN.md
+
+Define the technical approach — which test types for which layers, fixture strategy, mock boundaries.
+
+```markdown
+# Test Design
+
+## Test Architecture
+[For each layer in the project, specify which test type to use:]
+- Controller → @WebMvcTest with MockMvc (or RestTestClient on Boot 4+)
+- Repository → @DataJpaTest with H2/TestEntityManager
+- Service → plain JUnit 5 with @MockitoBean or Mockito.mock()
+- Model/Validator → plain JUnit 5
+- [Add others as needed based on the project's architecture]
+
+## Fixture Strategy
+[Shared test data builders vs per-test setup. How will you create test entities?]
+
+## Mock Boundaries
+[What gets mocked, what uses real implementations. Be specific per class.]
+
+## Dependency Decisions
+[Which test annotations, assertion library (AssertJ vs Hamcrest), any additional test dependencies needed]
+
+## Risks
+[Technical risks specific to this project — e.g., form-based MVC patterns, entity relationships, custom formatters, Testcontainers requirements]
+```
+
+### 3. TEST-ROADMAP.md
+
+Break the work into **stages and steps**. Each step has entry criteria, work items, and exit criteria. Steps are ordered by dependency — simpler tests first, building patterns for complex tests later.
+
+**This is the most important document.** It determines how Phase 2 executes.
+
+```markdown
+# Test Roadmap
+
+## Stage 1: Test Infrastructure and Foundation
+
+### Step 1.0: Verify project and understand test baseline
+
+**Entry criteria**:
+- Read TEST-VISION.md and TEST-DESIGN.md
+
+**Work items**:
+- [ ] Run ./mvnw compile — verify clean compilation
+- [ ] Check JaCoCo config — ensure report generation works (add plugin if missing)
+- [ ] Investigate unknowns from TEST-VISION.md (test data loading, framework quirks, etc.)
+- [ ] If existing tests exist, run ./mvnw test and record baseline coverage
+
+**Exit criteria**:
+- [ ] Project compiles
+- [ ] JaCoCo configured and working
+- [ ] Unknowns resolved or flagged
+- [ ] Update TEST-LEARNINGS.md with Step 1.0 findings
+
+### Step 1.1: [First batch of tests — simplest layer]
+
+**Entry criteria**:
+- [ ] Step 1.0 complete
+- [ ] Read TEST-LEARNINGS.md
+
+**Work items**:
+- [ ] WRITE: [specific test classes for the simplest layer — e.g., model/validator tests]
+- [ ] VERIFY: ./mvnw test — all pass
+- [ ] CHECK: coverage report — establish first coverage baseline
+
+**Exit criteria**:
+- [ ] All tests pass
+- [ ] Coverage baseline recorded
+- [ ] Update TEST-LEARNINGS.md with patterns that worked/failed
+
+### Step 1.2: [Second batch — medium complexity]
+
+**Entry criteria**:
+- [ ] Step 1.1 complete
+- [ ] Read TEST-LEARNINGS.md — apply patterns from Step 1.1
+
+**Work items**:
+- [ ] WRITE: [specific test classes — e.g., controller slice tests]
+- [ ] VERIFY: ./mvnw test — all pass before continuing to next class
+- [ ] [For complex classes, write and verify one at a time]
+
+**Exit criteria**:
+- [ ] All tests pass
+- [ ] Update TEST-LEARNINGS.md with patterns for this layer
+
+### Step 1.N: [Continue with remaining layers...]
+
+[Add as many steps as needed. Each step should be one focused batch of work.]
+
+## Stage 2: Coverage Validation and Gap-Filling
+
+### Step 2.0: Coverage audit and targeted gap-filling
+
+**Entry criteria**:
+- [ ] All Stage 1 steps complete
+- [ ] Read TEST-LEARNINGS.md
+
+**Work items**:
+- [ ] RUN: ./mvnw clean test jacoco:report
+- [ ] READ: target/site/jacoco/index.html — identify coverage gaps
+- [ ] WRITE: targeted tests for uncovered code paths (error handling, edge cases, branches)
+- [ ] VERIFY: ./mvnw test — all still pass
+
+**Exit criteria**:
+- [ ] Coverage ≥ 80%
+- [ ] All tests pass
+- [ ] Update TEST-LEARNINGS.md with final findings
+```
+
+## Design Principles for the Roadmap
+
+1. **Order steps by dependency**: Simple tests first (model/validator), then medium (controllers with mocks), then complex (integration, data layer). Patterns learned early inform later steps.
+
+2. **Keep steps focused**: Each step covers one layer or one category of tests. Don't mix controller tests and repository tests in the same step.
+
+3. **Name specific test classes**: In work items, list the exact test class names to create (e.g., "WRITE: OwnerControllerTest, PetControllerTest"). Don't use vague descriptions.
+
+4. **Validation is mandatory**: Every step ends with `./mvnw test` — all pass. Never move to the next step with failing tests.
+
+5. **Learnings propagate forward**: Every step's entry criteria include reading TEST-LEARNINGS.md. This is how discoveries from early steps improve later steps.
+
+6. **Start with the easiest wins**: Step 1.1 should be the simplest tests (plain JUnit, no Spring context). This validates the test infrastructure and establishes patterns before tackling complex slice tests.
+
+7. **Save the hardest for last**: The most complex test classes (form handling, entity relationships, custom formatters) go in later steps where accumulated learnings are available.
+
+## Constraints
+- Do NOT write any Java test code in this phase
+- Do NOT modify pom.xml or any source files
+- Only create TEST-VISION.md, TEST-DESIGN.md, TEST-ROADMAP.md
