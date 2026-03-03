@@ -6,7 +6,7 @@
 
 ## Overview
 
-Grow a code coverage improvement agent through 4 variants across 5 Spring Getting Started guides. Test the hypothesis that knowledge injection > prompt engineering > model choice. Stage 1 builds all infrastructure (invoker, judges, dataset). Stage 2 wires bootstrap + knowledge injection, then runs variants and collects data. Stage 3 analyzes results. This experiment calibrates the methodology; harder targets and cross-model comparison are planned iterations.
+Grow a code coverage improvement agent through 4 variants across 5 Spring Getting Started guides. Test the hypothesis that knowledge injection > prompt engineering > model choice. Stage 1 builds all infrastructure (invoker, judges, dataset). Stage 2 wires bootstrap + knowledge injection, then runs variants and collects data. Stage 3 audits data quality then builds a DuckDB + Python analysis pipeline (ETL, variant comparison, growth story, sensitivity analysis) following the spring-ai-project-maint pattern. Stage 4 graduates the best variant. This experiment calibrates the methodology; harder targets and cross-model comparison are planned iterations.
 
 > **Before every commit**: Verify ALL exit criteria for the current step are met. Do NOT remove exit criteria to mark a step complete — fulfill them.
 
@@ -415,27 +415,208 @@ Also discovered: `com.tuvium:claude-sdk-capture` (experiment-core) duplicates `i
 
 ---
 
-## Stage 3: Analysis and Graduation
+## Stage 3: Data Analysis Pipeline
 
-### Step 3.0: Analyze Results
+### Step 3.0: Audit and Debug Result Data
 
 **Entry criteria**:
-- [ ] Stage 2 complete
+- [ ] Stage 2 complete (all variants run)
 - [ ] Read: `plans/learnings/LEARNINGS.md` — compacted learnings through Stage 2
+- [ ] Read: `plans/inbox/python-data-analysis-stack.md` — analysis pipeline plan
+
+**Context**: Results data has known gaps from the evolving pipeline. Early control/variant-a runs (pre-exhaust-capture) have zero phases, zero tokens, zero cost. Efficiency scores are only present in runs after the `DefaultEfficiencyEvaluator` was wired. Current audit (2026-03-03):
+
+| Variant | Items | With phases | With efficiency |
+|---------|-------|-------------|-----------------|
+| control | 23 | 15 | 7 |
+| variant-a | 20 | 15 | 5 |
+| variant-b | 12 | 12 | 5 |
+| variant-c | 12 | 12 | 5 |
+
+Agent journal data (tool calls, thinking blocks, cost breakdowns within phases) may also be incomplete or absent in early runs.
 
 **Work items**:
-- [ ] ANALYZE growth story for patterns
-- [ ] IDENTIFY which knowledge file had most impact
-- [ ] DOCUMENT findings in `analysis/` directory
+- [ ] WRITE `scripts/audit_results.py` — scan all result JSON files and report:
+  - Per-variant: total items, items with phases, items with efficiency scores, items with non-zero tokens/cost
+  - Per-item: which fields are populated vs zero/empty
+  - Identify which runs are pre-exhaust-capture vs post (timestamp boundary)
+  - Identify which runs are pre-efficiency-evaluator vs post
+  - Check agent journal data completeness (tool calls, thinking blocks within phases)
+- [ ] RUN audit script, save output to `analysis/data-audit.md`
+- [ ] DECIDE: re-run incomplete variants with current pipeline, or mark early runs as "pre-instrumentation" and exclude from analysis?
+  - Re-running is cleaner but costs agent invocation time
+  - Excluding is faster but reduces sample size
+- [ ] IF RE-RUNNING: execute re-runs for items missing phases/efficiency scores
+- [ ] IF EXCLUDING: document exclusion criteria so `load_results.py` can filter
+- [ ] VERIFY: all retained data has complete phases, tokens, cost, and efficiency scores
 
 **Exit criteria**:
-- [ ] Analysis documented in `analysis/`
-- [ ] Create: `plans/learnings/step-3.0-analysis.md`
+- [ ] `scripts/audit_results.py` written and working
+- [ ] `analysis/data-audit.md` documents the state of all result data
+- [ ] Decision made and documented: re-run vs exclude
+- [ ] All retained result data is complete (no zero-phase, zero-token gaps)
+- [ ] Create: `plans/learnings/step-3.0-data-audit.md`
 - [ ] Update `CLAUDE.md` with distilled learnings
 - [ ] Update `ROADMAP.md` checkboxes
 - [ ] COMMIT
 
-**Deliverables**: Analysis documentation, pattern identification
+**Deliverables**: `scripts/audit_results.py`, `analysis/data-audit.md`, clean dataset for analysis
+
+---
+
+### Step 3.1: Python Environment and ETL
+
+**Entry criteria**:
+- [ ] Step 3.0 complete (clean, audited result data)
+- [ ] Read: `plans/learnings/step-3.0-data-audit.md` — prior step learnings
+- [ ] Read: `plans/inbox/python-data-analysis-stack.md` — analysis pipeline plan
+
+**Reference**: Study the spring-ai-project-maint patterns before writing:
+- `/home/mark/tuvium/projects/spring-ai-project-maint/plans/DESIGN.md` — data model, DuckDB schema, design decisions
+- `/home/mark/tuvium/projects/spring-ai-project-maint/scripts/parse_git_history.py` — raw → parquet ETL pattern
+- `/home/mark/tuvium/projects/spring-ai-project-maint/scripts/compute_mvi.py` — DuckDB query → parquet output pattern
+
+**Work items**:
+- [ ] CREATE `requirements.txt` in project root: `duckdb`, `pandas>=2.0`, `matplotlib>=3.7`, `numpy>=1.24`
+- [ ] CREATE Python venv: `uv venv && uv pip install -r requirements.txt`
+- [ ] CREATE directory structure: `data/curated/`, `analysis/figures/`, `analysis/tables/`, `analysis/cards/`
+- [ ] ADD `data/curated/` and `*.parquet` to `.gitignore`
+- [ ] WRITE `scripts/load_results.py` — ETL: read all `results/**/index.json` → normalize into:
+  - `data/curated/runs.parquet` (run_id, variant, model, timestamp, config)
+  - `data/curated/item_results.parquet` (per-item: coverage, scores, efficiency, cost, tokens)
+  - `data/curated/judge_scores.parquet` (per-criterion detail)
+  - Apply exclusion filters from Step 3.0 audit
+- [ ] VERIFY: run `scripts/load_results.py`, inspect parquet files with ad-hoc DuckDB queries
+- [ ] VERIFY: row counts match expected items per variant
+
+**Exit criteria**:
+- [ ] Python environment set up with all dependencies
+- [ ] `scripts/load_results.py` produces clean parquet files from result JSON
+- [ ] DuckDB can query parquet files (verify with simple SELECT)
+- [ ] Create: `plans/learnings/step-3.1-etl.md`
+- [ ] Update `CLAUDE.md` with distilled learnings (Python env, run instructions)
+- [ ] Update `ROADMAP.md` checkboxes
+- [ ] COMMIT
+
+**Deliverables**: Python environment, `scripts/load_results.py`, parquet files in `data/curated/`
+
+---
+
+### Step 3.2: Variant Comparison and Thesis Queries
+
+**Entry criteria**:
+- [ ] Step 3.1 complete (parquet files available)
+- [ ] Read: `plans/learnings/step-3.1-etl.md` — prior step learnings
+
+**Reference**: Study visualization patterns:
+- `/home/mark/tuvium/projects/spring-ai-project-maint/scripts/plot_quadrants.py` — DuckDB → matplotlib
+- `/home/mark/tuvium/projects/spring-ai-project-maint/scripts/sensitivity_analysis.py` — weight sweep
+
+**Work items**:
+- [ ] WRITE `scripts/variant_comparison.py` — core ablation analysis:
+  - Per-variant aggregates: avg coverage gain, adherence, efficiency, cost, build success %
+  - Per-variant per-item breakdown
+  - Output: `analysis/tables/variant-comparison.md`
+- [ ] RUN thesis queries (conversational analysis workflow — tell Claude what to see, iterate):
+  - Q1: Does knowledge improve correctness? (coverage delta by variant)
+  - Q2: Does knowledge improve efficiency? (efficiency composite by variant)
+  - Q3: Does model matter less than knowledge? (expensive+no-KB vs cheap+full-KB)
+  - Q5: Where does knowledge help most? (per-item delta control vs variant-c)
+- [ ] WRITE `scripts/plot_variant_radar.py` — radar/spider chart: one polygon per variant showing correctness, adherence, efficiency
+- [ ] WRITE `scripts/plot_cost_vs_quality.py` — scatter: cost (x) vs coverage gain (y), colored by variant
+- [ ] GENERATE figures to `analysis/figures/`
+
+**Exit criteria**:
+- [ ] `analysis/tables/variant-comparison.md` — aggregate scores across all variants
+- [ ] `analysis/figures/variant-radar.png` — three-dimensional comparison
+- [ ] `analysis/figures/cost-vs-quality.png` — cost/quality tradeoff
+- [ ] Thesis queries answered with data (documented in analysis/)
+- [ ] Create: `plans/learnings/step-3.2-variant-comparison.md`
+- [ ] Update `CLAUDE.md` with distilled learnings
+- [ ] Update `ROADMAP.md` checkboxes
+- [ ] COMMIT
+
+**Deliverables**: Variant comparison tables, radar charts, cost/quality plots, thesis query answers
+
+---
+
+### Step 3.3: Growth Story and Sensitivity Analysis
+
+**Entry criteria**:
+- [ ] Step 3.2 complete
+- [ ] Read: `plans/learnings/step-3.2-variant-comparison.md` — prior step learnings
+
+**Work items**:
+- [ ] WRITE `scripts/growth_story.py` — track improvement across iterations of the growth loop (run → judge → add knowledge → run again). Line chart showing scores over iterations.
+  - Q4: What's the growth loop trajectory? (iteration-over-iteration for variant-c)
+- [ ] WRITE `scripts/sensitivity_analysis.py` — vary efficiency weights, check if variant ordering is stable. Follow the spring-ai-project-maint pattern.
+- [ ] WRITE `scripts/generate_item_cards.py` — per-item detail cards (markdown): coverage before/after, judge scores, efficiency breakdown, agent trajectory summary
+- [ ] GENERATE cards to `analysis/cards/`
+- [ ] REVIEW item cards for outliers (items where variant-c underperformed control — why?)
+
+**Exit criteria**:
+- [ ] `analysis/figures/growth-trajectory.png` — iteration-over-iteration improvement
+- [ ] `analysis/tables/sensitivity.md` — weight sensitivity results
+- [ ] `analysis/cards/*.md` — per-item detail cards
+- [ ] Outlier analysis documented
+- [ ] Create: `plans/learnings/step-3.3-growth-sensitivity.md`
+- [ ] Update `CLAUDE.md` with distilled learnings
+- [ ] Update `ROADMAP.md` checkboxes
+- [ ] COMMIT
+
+**Deliverables**: Growth trajectory chart, sensitivity analysis, per-item cards, outlier analysis
+
+---
+
+### Step 3.4: Stage 3 Consolidation
+
+**Entry criteria**:
+- [ ] All Stage 3 steps complete (3.0–3.3)
+- [ ] Read: all `plans/learnings/step-3.*` files from this stage
+
+**Work items**:
+- [ ] COMPACT learnings from Stage 3 into `plans/learnings/LEARNINGS.md`
+  - Data quality issues discovered and resolved
+  - ETL patterns (JSON → parquet → DuckDB)
+  - Key findings from variant comparison (hypothesis confirmed/refuted?)
+  - Conversational data science workflow observations
+  - Which visualizations were most useful for the narrative
+- [ ] UPDATE `CLAUDE.md` with distilled learnings
+- [ ] WRITE `analysis/findings-summary.md` — executive summary of all analysis findings
+
+**Exit criteria**:
+- [ ] `LEARNINGS.md` updated with Stage 3 compacted summary
+- [ ] `analysis/findings-summary.md` — one-page summary of key findings
+- [ ] Create: `plans/learnings/step-3.4-stage3-summary.md`
+- [ ] Update `CLAUDE.md` with distilled learnings
+- [ ] Update `ROADMAP.md` checkboxes
+- [ ] COMMIT
+
+**Deliverables**: Updated `LEARNINGS.md` covering Stages 1-3, findings summary
+
+---
+
+## Stage 4: Graduation
+
+### Step 4.0: Graduate Best Variant
+
+**Entry criteria**:
+- [ ] Stage 3 complete
+- [ ] Read: `plans/learnings/LEARNINGS.md` — compacted learnings through Stage 3
+- [ ] Read: `analysis/findings-summary.md` — key findings
+
+**Work items**:
+- [ ] EXTRACT best variant → standalone agent project
+- [ ] PACKAGE for ACP marketplace (deferred)
+
+**Exit criteria**:
+- [ ] Best variant extracted
+- [ ] Create: `plans/learnings/step-4.0-graduation.md`
+- [ ] Update `CLAUDE.md` with distilled learnings
+- [ ] Update `ROADMAP.md` checkboxes
+- [ ] COMMIT
+
+**Deliverables**: Standalone agent project from best variant
 
 **Planned future iterations** (out of scope for this run, design in from the start):
 - Pet Clinic + harder repos — genuine complexity where KB advantage matters
@@ -444,33 +625,12 @@ Also discovered: `com.tuvium:claude-sdk-capture` (experiment-core) duplicates `i
 
 ---
 
-### Step 3.1: Graduate Best Variant
-
-**Entry criteria**:
-- [ ] Step 3.0 complete
-- [ ] Read: `plans/learnings/step-3.0-analysis.md` — prior step learnings
-
-**Work items**:
-- [ ] EXTRACT best variant → standalone agent project
-- [ ] PACKAGE for ACP marketplace (deferred)
-
-**Exit criteria**:
-- [ ] Best variant extracted
-- [ ] Create: `plans/learnings/step-3.1-graduation.md`
-- [ ] Update `CLAUDE.md` with distilled learnings
-- [ ] Update `ROADMAP.md` checkboxes
-- [ ] COMMIT
-
-**Deliverables**: Standalone agent project from best variant
-
----
-
 ## Learnings Structure
 
 ```
 plans/learnings/
-├── LEARNINGS.md                    # Tier 1: Compacted summary (Stages 1-2)
-├── step-1.3-dataset.md             # Tier 2: Per-step details
+├── LEARNINGS.md                       # Tier 1: Compacted summary (Stages 1-3)
+├── step-1.3-dataset.md                # Tier 2: Per-step details
 ├── step-1.4-test-quality-judge.md
 ├── step-1.5-stage1-summary.md
 ├── step-2.0-bootstrap.md
@@ -480,8 +640,12 @@ plans/learnings/
 ├── step-2.2-control.md
 ├── step-2.3-results.md
 ├── step-2.4-stage2-summary.md
-├── step-3.0-analysis.md
-└── step-3.1-graduation.md
+├── step-3.0-data-audit.md
+├── step-3.1-etl.md
+├── step-3.2-variant-comparison.md
+├── step-3.3-growth-sensitivity.md
+├── step-3.4-stage3-summary.md
+└── step-4.0-graduation.md
 ```
 
 ---
@@ -539,3 +703,4 @@ Every step's exit criteria must include:
 | 2026-03-03 | Fixed VerdictExtractor to recurse into subVerdicts — all 4 tiers now surface in results | Variant-a debugging |
 | 2026-03-03 | Ran control (60% pass, 3/5) and variant-a (40% pass, 2/5) — zero exhaust data, can't diagnose failures | Initial variant runs |
 | 2026-03-03 | Added Step 2.2b: wire agent exhaust capture via SessionLogParser + consolidate PhaseCapture coordinates | Agent exhaust gap discovered |
+| 2026-03-03 | Replaced Stage 3 stubs with full data analysis pipeline (Steps 3.0-3.4) + Stage 4 graduation. Added Step 3.0 data audit for missing phases/efficiency/journal data. DuckDB + Python stack based on spring-ai-project-maint pattern. | Plan-to-roadmap from python-data-analysis-stack.md |
