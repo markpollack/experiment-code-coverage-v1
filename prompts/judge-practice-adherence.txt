@@ -57,6 +57,8 @@ Score the test suite on these criteria (0.0–1.0 each, equal weight):
    - Uses BlockingQueue or CountDownLatch for async message assertions
    - Disconnects sessions and stops StompClient in teardown
 
+   If a domain is not present in the production code (e.g., no WebFlux controllers, no security configuration), mark that domain as "N/A" in the evidence and score based only on domains that are present.
+
    0.2: Wrong infrastructure — e.g., MockMvc for WebSocket, .block() for reactive, no flush/clear for JPA reads, @SpringBootTest where slice would work.
    0.5: Mostly correct infrastructure but missing key practices — e.g., JPA tests use the repository under test for setup, reactive tests use .block(), security tests disable the filter chain.
    0.8: Correct infrastructure for each domain with proper practices (flush+clear, StepVerifier, csrf(), scoped slices). Minor gaps.
@@ -104,7 +106,9 @@ Return JSON only:
 }
 
 Important:
+- If src/test/ contains no test classes, return all scores as 0.0 with evidence "no test classes found" for each criterion.
 - Evidence must reference specific files and code patterns you observed (e.g., "src/test/java/com/example/GreetingControllerTest.java uses @SpringBootTest instead of @WebMvcTest").
+- Evidence may reference multiple files — separate with semicolons (e.g., "GreetingControllerTest.java uses @WebMvcTest correctly; OrderRepositoryTest.java uses @SpringBootTest instead of @DataJpaTest").
 - Score based on what you observe in the test suite, not on what is absent from the production code.
 - If no tests exist for a domain (e.g., no security tests because there is no security), do not penalize — score based on the tests that do exist.
 - If very few tests exist, score based on the quality of what is present, noting the limited sample in evidence.

@@ -1,5 +1,7 @@
 # Judge Practice Adherence — Traceability
 
+> **Refined 2026-03-02**: Added zero-tests escape hatch, N/A guidance for criterion 4, multi-file evidence format.
+
 Maps each criterion in `prompts/judge-practice-adherence.txt` back to its source KB file(s).
 
 ## 1. TEST SLICE SELECTION
