@@ -2,11 +2,11 @@
 
 > **Created**: 2026-03-01
 > **Last updated**: 2026-03-03
-> **Status**: Stage 2 complete. Full suite run done (4 variants × 5 guides, Sonnet, 1h39m). Stage 3 in progress — building Python analysis pipeline.
+> **Status**: Stage 3 complete. Full suite run done (4 variants × 5 guides, Sonnet). Analysis pipeline built. Stage 4 next — implementing two-phase variant-d to test structured knowledge consumption.
 
 ## Overview
 
-Grow a code coverage improvement agent through 4 variants across 5 Spring Getting Started guides. Test the hypothesis that knowledge injection > prompt engineering > model choice. Stage 1 builds all infrastructure (invoker, judges, dataset). Stage 2 wires bootstrap + knowledge injection, then runs variants and collects data. Stage 3 audits data quality then builds a DuckDB + Python analysis pipeline (ETL, variant comparison, growth story, sensitivity analysis) following the spring-ai-project-maint pattern. Stage 4 graduates the best variant. This experiment calibrates the methodology; harder targets and cross-model comparison are planned iterations.
+Grow a code coverage improvement agent through 5 variants across 5 Spring Getting Started guides. Test the hypothesis that `knowledge + structured execution > model`. Stage 1 builds all infrastructure (invoker, judges, dataset). Stage 2 wires bootstrap + knowledge injection, then runs variants and collects data. Stage 3 audits data quality then builds a DuckDB + Python analysis pipeline. **Stage 4** implements a two-phase explore-then-act variant (variant-d) to test whether structured knowledge consumption (Layer 1 + Layer 2) beats unstructured injection. **Stage 5** runs the full suite with all 5 variants + golden judge for thesis validation. **Stage 6** graduates the best variant, adds Pet Clinic for harder targets, and runs cross-model comparison (Haiku+KB vs Sonnet).
 
 > **Before every commit**: Verify ALL exit criteria for the current step are met. Do NOT remove exit criteria to mark a step complete — fulfill them.
 
@@ -557,59 +557,363 @@ Also discovered: `com.tuvium:claude-sdk-capture` (experiment-core) duplicates `i
 
 ---
 
-## Stage 4: Golden Judge Re-Run + Graduation
+## Stage 4: Two-Phase Variant (variant-d)
 
-### Step 4.0: Full Suite Re-Run with Golden Judge
+> **Rationale**: Initial results show KB injection (variant-b, variant-c) doesn't beat the hardened prompt (variant-a) on practice quality. The two-layer value model predicts this: knowledge without structured orchestration doesn't help. The fix is a two-phase explore-then-act variant proven in the refactoring agent (80%→100% improvement). See `plans/inbox/two-phase-variant-and-next-steps.md` for full analysis.
+
+### Step 4.0: Context Review
 
 **Entry criteria**:
 - [x] Stage 3 complete
 - [ ] Read: `plans/learnings/LEARNINGS.md` — compacted learnings through Stage 3
-- [ ] Read: `analysis/findings-summary.md` — key findings
-
-**Context**: The full suite run (2026-03-03) did NOT include `GoldenTestComparisonJudge` — it was committed after the run. A re-run is needed to populate `golden_similarity` scores and validate the AST comparison against real agent output.
+- [ ] Read: `analysis/findings-summary.md` — key findings from Stage 3 analysis
+- [ ] Read: `plans/inbox/two-phase-variant-and-next-steps.md` — two-phase design + rationale
+- [ ] Read: `plans/inbox/golden-judge-handoff.md` — golden judge context
 
 **Work items**:
-- [ ] VERIFY `GoldenTestComparisonJudge` is wired in `ExperimentApp.buildJuryFactory()` tier 2
-- [ ] VERIFY `./mvnw test` — all tests pass
-- [ ] RUN full suite: `./mvnw compile exec:java -Dexec.args="--run-all-variants"` (from plain terminal)
-- [ ] UPDATE `scripts/load_results.py` with new run IDs
-- [ ] RE-RUN analysis pipeline: `load_results.py` → `variant_comparison.py` → `plot_variant_radar.py` → `generate_item_cards.py`
-- [ ] REVIEW golden_similarity scores — do they correlate with T3? Do they add signal?
+- [ ] REVIEW Stage 3 findings: variant-a (hardened prompt, no KB) beats variant-b/c (with KB) on T3 adherence
+- [ ] REVIEW two-layer value model diagnosis: current KB variants have Layer 2 (knowledge) without structured Layer 1 (orchestration)
+- [ ] REVIEW refactoring-agent two-phase pattern at `~/tuvium/projects/refactoring-agent/agent/src/main/java/com/tuvium/agent/RefactoringAgent.java`
+- [ ] VERIFY `ClaudeSyncClient` is available in `claude-agent-sdk-java` dependency (session continuity between explore and act phases)
+- [ ] DOCUMENT design decisions in learnings
 
 **Exit criteria**:
-- [ ] All 4 variants × 5 items have `golden_similarity` scores
-- [ ] Analysis outputs updated with golden comparison data
-- [ ] Create: `plans/learnings/step-4.0-golden-rerun.md`
+- [ ] ClaudeSyncClient API understood and available
+- [ ] Create: `plans/learnings/step-4.0-context-review.md`
 - [ ] Update `ROADMAP.md` checkboxes
-- [ ] COMMIT
 
-**Deliverables**: Complete result set with golden comparison, updated analysis
+**Deliverables**: Design decisions documented, ClaudeSyncClient API confirmed
 
 ---
 
-### Step 4.1: Graduate Best Variant
+### Step 4.1: Implement Two-Phase CodeCoverageAgentInvoker
 
 **Entry criteria**:
 - [ ] Step 4.0 complete
-- [ ] Read: `plans/learnings/step-4.0-golden-rerun.md`
+- [ ] Read: `plans/learnings/step-4.0-context-review.md` — prior step learnings
+
+**Context**: The current `CodeCoverageAgentInvoker.invoke()` makes one `AgentClient` call. The two-phase variant needs two turns in one `ClaudeSyncClient` session so the agent retains understanding between explore and act. Pattern proven in `RefactoringAgent.java`.
+
+**Work items**:
+- [ ] ADD `claude-agent-sdk-java` dependency to pom.xml (if not already present for `ClaudeSyncClient`)
+- [ ] IMPLEMENT `TwoPhaseCodeCoverageAgentInvoker` (or add two-phase mode to existing invoker):
+  - Phase 1 (explore+plan): `client.connect(explorePrompt)` → agent reads project + KB, writes `TEST_PLAN.md`
+  - Phase 2 (execute): `client.query(actPrompt)` → agent implements tests per plan, runs `./mvnw test`
+  - Both phases in single `ClaudeSyncClient` session (session continuity)
+  - Capture `PhaseCapture` from both phases for exhaust data
+- [ ] WIRE variant-d invoker creation in `ExperimentApp.createInvoker()` — detect variant-d and return two-phase invoker
+- [ ] VERIFY: `./mvnw test` — all 34+ tests pass
+
+**Exit criteria**:
+- [ ] Two-phase invoker compiles and integrates with ExperimentApp
+- [ ] All tests pass: `./mvnw test`
+- [ ] Create: `plans/learnings/step-4.1-two-phase-invoker.md`
+- [ ] Update `CLAUDE.md` with distilled learnings
+- [ ] Update `ROADMAP.md` checkboxes
+- [ ] COMMIT
+
+**Deliverables**: Two-phase `CodeCoverageAgentInvoker` with `ClaudeSyncClient` session continuity
+
+---
+
+### Step 4.2: Explore + Act Prompts
+
+**Entry criteria**:
+- [ ] Step 4.1 complete
+- [ ] Read: `plans/learnings/step-4.1-two-phase-invoker.md` — prior step learnings
+
+**Work items**:
+- [ ] WRITE `prompts/v3-explore.txt` — explore phase prompt:
+  - Read project structure and source code
+  - Read knowledge files in `knowledge/`
+  - Analyze what the application does
+  - Write `TEST_PLAN.md` with: which test classes to create and why, which Spring test annotations to use and why, which assertion patterns apply, which edge cases to test
+  - Do NOT write any test code yet
+- [ ] WRITE `prompts/v3-act.txt` — act phase prompt:
+  - Read `TEST_PLAN.md`
+  - Implement tests according to plan
+  - Run `./mvnw test` to verify compilation and passing
+- [ ] ADD variant-d to `experiment-config.yaml`:
+  - name: variant-d
+  - promptFile: v3-explore.txt (explore phase; act prompt loaded separately by two-phase invoker)
+  - knowledgeDir: knowledge
+  - knowledgeFiles: [index.md] (full KB, same as variant-c)
+- [ ] VERIFY: config loads correctly with `./mvnw compile exec:java -Dexec.args="--variant variant-d --item gs-rest-service"` (will fail at runtime but should parse config)
+
+**Exit criteria**:
+- [ ] Both prompt files written and reviewed
+- [ ] Variant-d in experiment-config.yaml
+- [ ] Config parsing works
+- [ ] Create: `plans/learnings/step-4.2-prompts.md`
+- [ ] Update `CLAUDE.md` with distilled learnings
+- [ ] Update `ROADMAP.md` checkboxes
+- [ ] COMMIT
+
+**Deliverables**: `v3-explore.txt`, `v3-act.txt`, variant-d config entry
+
+---
+
+### Step 4.3: Single-Item Vibe Check (gs-rest-service)
+
+**Entry criteria**:
+- [ ] Step 4.2 complete
+- [ ] Read: `plans/learnings/step-4.2-prompts.md` — prior step learnings
+
+**Context**: Before committing to a multi-hour full suite run, validate the two-phase approach on the cleanest signal item. gs-rest-service is most representative (simple REST controller), has clear golden standard (2 @Test methods, @SpringBootTest + @AutoConfigureMockMvc + MockMvc), and runs fastest.
+
+**Work items**:
+- [ ] RUN: `./mvnw compile exec:java -Dexec.args="--variant variant-d --item gs-rest-service"` (from plain terminal, ~15 min)
+- [ ] INSPECT `TEST_PLAN.md` in workspace — did the agent absorb KB guidance?
+  - Does it mention `@WebMvcTest` or `@SpringBootTest`? (KB recommendation)
+  - Does it mention `MockMvc`? (golden standard pattern)
+  - Does it identify edge cases from KB? (e.g., error handling, custom parameters)
+- [ ] COMPARE variant-d scores against variant-a on gs-rest-service:
+  - T3 practice adherence (primary metric)
+  - Golden test comparison (new — first real data for this judge)
+  - Coverage delta
+  - Cost (two-phase may be more expensive due to double invocation)
+- [ ] RUN analysis: update `load_results.py` with variant-d run ID, regenerate comparison table
+- [ ] DECIDE: does variant-d beat variant-a on gs-rest-service? If yes → proceed to full suite. If no → diagnose (inspect TEST_PLAN.md, check context utilization) before committing hours.
+
+**Exit criteria**:
+- [ ] Variant-d vibe check complete on gs-rest-service
+- [ ] TEST_PLAN.md inspected for KB absorption evidence
+- [ ] Comparison against variant-a documented
+- [ ] Go/no-go decision for full suite run
+- [ ] Create: `plans/learnings/step-4.3-vibe-check.md`
+- [ ] Update `CLAUDE.md` with distilled learnings
+- [ ] Update `ROADMAP.md` checkboxes
+- [ ] COMMIT
+
+**Deliverables**: Vibe check results, TEST_PLAN.md analysis, go/no-go decision
+
+---
+
+### Step 4.4: Stage 4 Consolidation
+
+**Entry criteria**:
+- [ ] All Stage 4 steps complete (4.0–4.3)
+- [ ] Read: all `plans/learnings/step-4.*` files from this stage
+
+**Work items**:
+- [ ] COMPACT learnings from Stage 4 into `plans/learnings/LEARNINGS.md`
+- [ ] UPDATE `CLAUDE.md` with distilled learnings
+- [ ] DOCUMENT: two-phase pattern findings, TEST_PLAN.md as diagnostic artifact, ClaudeSyncClient integration notes
+
+**Exit criteria**:
+- [ ] `LEARNINGS.md` updated with Stage 4 compacted summary
+- [ ] Create: `plans/learnings/step-4.4-stage4-summary.md`
+- [ ] Update `CLAUDE.md` with distilled learnings
+- [ ] Update `ROADMAP.md` checkboxes
+- [ ] COMMIT
+
+**Deliverables**: Updated `LEARNINGS.md` covering Stages 1-4, stage summary
+
+---
+
+## Stage 5: Full Suite Re-Run + Comparative Analysis
+
+> **Rationale**: Run all 5 variants (control, variant-a through variant-d) with golden judge active. This produces the complete dataset: golden_similarity scores (missing from initial run), variant-d two-phase results, and a clean comparison of all approaches. One run, all data.
+
+### Step 5.0: Full Suite Run (5 variants, golden judge active)
+
+**Entry criteria**:
+- [ ] Stage 4 complete (variant-d validated on gs-rest-service)
+- [ ] Read: `plans/learnings/LEARNINGS.md` — compacted learnings through Stage 4
+- [ ] Read: `plans/learnings/step-4.3-vibe-check.md` — vibe check results
+- [ ] Go decision from Step 4.3
+
+**Work items**:
+- [ ] VERIFY `GoldenTestComparisonJudge` is wired in `ExperimentApp.buildJuryFactory()` tier 2
+- [ ] VERIFY all 5 variants present in `experiment-config.yaml`
+- [ ] VERIFY `./mvnw test` — all tests pass
+- [ ] RUN full suite: `./mvnw compile exec:java -Dexec.args="--run-all-variants"` (from plain terminal, ~2+ hours)
+- [ ] VERIFY results: all 5 variants × 5 guides produced results with phases, tokens, cost, golden_similarity
+
+**Exit criteria**:
+- [ ] All 5 variants × 5 items have complete results including golden_similarity
+- [ ] Results in `results/code-coverage-experiment/`
+- [ ] Create: `plans/learnings/step-5.0-full-suite-rerun.md`
+- [ ] Update `ROADMAP.md` checkboxes
+- [ ] COMMIT
+
+**Deliverables**: Complete 25-item result set (5 variants × 5 guides) with all scores
+
+---
+
+### Step 5.1: Updated Analysis Pipeline
+
+**Entry criteria**:
+- [ ] Step 5.0 complete
+- [ ] Read: `plans/learnings/step-5.0-full-suite-rerun.md` — prior step learnings
+
+**Work items**:
+- [ ] UPDATE `scripts/load_results.py` — add variant-d run IDs, run group tag
+- [ ] ADD `golden_similarity` column to ETL (from `GoldenTestComparisonJudge` scores)
+- [ ] RE-RUN full analysis pipeline: `load_results.py` → `variant_comparison.py` → `plot_variant_radar.py` → `generate_item_cards.py`
+- [ ] ADD variant-d to radar chart and comparison table
+- [ ] REVIEW golden_similarity scores — do they correlate with T3? Do they add signal beyond practice adherence?
+- [ ] REVIEW variant-d vs variant-a — the thesis test: does structured L1 + rich L2 beat good implicit L1, no L2?
+
+**Exit criteria**:
+- [ ] Analysis outputs include variant-d and golden_similarity
+- [ ] Thesis test result documented (variant-d vs variant-a)
+- [ ] Create: `plans/learnings/step-5.1-analysis-update.md`
+- [ ] Update `CLAUDE.md` with distilled learnings
+- [ ] Update `ROADMAP.md` checkboxes
+- [ ] COMMIT
+
+**Deliverables**: Updated analysis tables, radar chart, item cards with all 5 variants + golden scores
+
+---
+
+### Step 5.2: Thesis Validation Analysis
+
+**Entry criteria**:
+- [ ] Step 5.1 complete
+- [ ] Read: `plans/learnings/step-5.1-analysis-update.md` — prior step learnings
+
+**Work items**:
+- [ ] ANSWER key thesis questions from the data:
+  - Q1: Does structured knowledge consumption (variant-d) beat unstructured (variant-b/c)?
+  - Q2: Does variant-d beat the hardened prompt (variant-a)?
+  - Q3: Does TEST_PLAN.md show higher golden_similarity? (knowledge absorption → expert-like patterns)
+  - Q4: What's the cost trade-off? (two-phase may cost more but produce better quality)
+  - Q5: Where does the two-phase approach help most? (per-item delta analysis)
+- [ ] WRITE `analysis/thesis-validation.md` — structured findings answering each question with data
+- [ ] IDENTIFY next experiment iteration priorities:
+  - If variant-d wins → scale to Pet Clinic, cross-model comparison
+  - If variant-d loses → diagnose (inspect TEST_PLAN.md artifacts, consider prompt refinement)
+
+**Exit criteria**:
+- [ ] `analysis/thesis-validation.md` written with data-backed conclusions
+- [ ] Next iteration priorities identified
+- [ ] Create: `plans/learnings/step-5.2-thesis-validation.md`
+- [ ] Update `CLAUDE.md` with distilled learnings
+- [ ] Update `ROADMAP.md` checkboxes
+- [ ] COMMIT
+
+**Deliverables**: Thesis validation analysis, next iteration priorities
+
+---
+
+### Step 5.3: Stage 5 Consolidation
+
+**Entry criteria**:
+- [ ] All Stage 5 steps complete (5.0–5.2)
+- [ ] Read: all `plans/learnings/step-5.*` files from this stage
+
+**Work items**:
+- [ ] COMPACT learnings from Stage 5 into `plans/learnings/LEARNINGS.md`
+- [ ] UPDATE `CLAUDE.md` with distilled learnings
+- [ ] UPDATE `analysis/findings-summary.md` with thesis validation results
+
+**Exit criteria**:
+- [ ] `LEARNINGS.md` updated with Stage 5 compacted summary
+- [ ] `analysis/findings-summary.md` updated
+- [ ] Create: `plans/learnings/step-5.3-stage5-summary.md`
+- [ ] Update `CLAUDE.md` with distilled learnings
+- [ ] Update `ROADMAP.md` checkboxes
+- [ ] COMMIT
+
+**Deliverables**: Updated `LEARNINGS.md` covering Stages 1-5, updated findings summary
+
+---
+
+## Stage 6: Graduation + Future Iterations
+
+### Step 6.0: Pet Clinic Dataset Expansion
+
+**Entry criteria**:
+- [ ] Stage 5 complete
+- [ ] Read: `plans/learnings/LEARNINGS.md` — compacted learnings through Stage 5
+- [ ] Variant-d validated and best variant identified
+
+**Context**: Pet Clinic has genuine complexity (multi-layer: controller → service → repository, multiple domain entities, form handling, validation, mixed web + JPA testing). Simple guides hit 85-100% coverage easily — ceiling effects make it hard to discriminate variants. Pet Clinic is where KB advantage should be most visible.
+
+**Work items**:
+- [ ] UPDATE `materialize.sh` — add per-item source URL support (different GitHub org, no `complete/` subdirectory)
+- [ ] ADD spring-petclinic to `dataset/items.yaml`
+- [ ] MATERIALIZE and verify: `./materialize.sh`
+- [ ] ADD Pet Clinic-specific knowledge to `knowledge/` (if needed)
+- [ ] RUN best variant + variant-d on Pet Clinic
+- [ ] COMPARE results against simple guides — does complexity reveal KB advantage?
+
+**Exit criteria**:
+- [ ] Pet Clinic dataset item working
+- [ ] Results compared against simple guides
+- [ ] Create: `plans/learnings/step-6.0-pet-clinic.md`
+- [ ] Update `ROADMAP.md` checkboxes
+- [ ] COMMIT
+
+**Deliverables**: Pet Clinic as dataset item, comparative results
+
+---
+
+### Step 6.1: Cross-Model Variant
+
+**Entry criteria**:
+- [ ] Step 6.0 complete (or can run in parallel with Pet Clinic)
+- [ ] Read: `plans/learnings/step-6.0-pet-clinic.md`
+
+**Context**: The ultimate thesis test — does `Haiku + KB + structured execution` beat `Sonnet/Opus + no KB`? This transforms "knowledge helps" into "knowledge + cheap model beats expensive model."
+
+**Work items**:
+- [ ] CONFIGURE cross-model variants in experiment-config.yaml (Haiku + variant-d, Opus + control)
+- [ ] RUN cross-model comparison on gs-rest-service first (vibe check)
+- [ ] IF promising → run on full suite + Pet Clinic
+- [ ] ANALYZE cost-vs-quality: Haiku+KB cost vs Sonnet/Opus cost with equivalent quality
+
+**Exit criteria**:
+- [ ] Cross-model comparison data collected
+- [ ] Cost-vs-quality analysis documented
+- [ ] Create: `plans/learnings/step-6.1-cross-model.md`
+- [ ] Update `ROADMAP.md` checkboxes
+- [ ] COMMIT
+
+**Deliverables**: Cross-model comparison results, cost-quality analysis
+
+---
+
+### Step 6.2: Graduate Best Variant
+
+**Entry criteria**:
+- [ ] Steps 6.0-6.1 complete (or at minimum Stage 5 thesis validation done)
 
 **Work items**:
 - [ ] EXTRACT best variant → standalone agent project
 - [ ] PACKAGE for ACP marketplace (deferred)
+- [ ] DOCUMENT the final configuration that won
 
 **Exit criteria**:
-- [ ] Best variant extracted
-- [ ] Create: `plans/learnings/step-4.1-graduation.md`
+- [ ] Best variant extracted as standalone project
+- [ ] Create: `plans/learnings/step-6.2-graduation.md`
 - [ ] Update `CLAUDE.md` with distilled learnings
 - [ ] Update `ROADMAP.md` checkboxes
 - [ ] COMMIT
 
 **Deliverables**: Standalone agent project from best variant
 
-**Planned future iterations** (out of scope for this run, design in from the start):
-- Pet Clinic + harder repos — genuine complexity where KB advantage matters
-- Cross-model variant (Haiku+KB vs Sonnet/Opus with no KB) — transforms "knowledge helps" into "knowledge + cheap model beats expensive model"
-- SWE-bench Lite (N=150) — paper-grade evidence with external ground truth (resolve rate), zero circularity
+---
+
+### Step 6.3: Stage 6 Consolidation
+
+**Entry criteria**:
+- [ ] All Stage 6 steps complete
+- [ ] Read: all `plans/learnings/step-6.*` files
+
+**Work items**:
+- [ ] COMPACT learnings from Stage 6 into `plans/learnings/LEARNINGS.md`
+- [ ] WRITE final experiment report: `analysis/experiment-report.md`
+
+**Exit criteria**:
+- [ ] `LEARNINGS.md` covers all stages
+- [ ] Final experiment report written
+- [ ] Create: `plans/learnings/step-6.3-stage6-summary.md`
+- [ ] Update `ROADMAP.md` checkboxes
+- [ ] COMMIT
+
+**Deliverables**: Complete `LEARNINGS.md`, final experiment report
 
 ---
 
@@ -617,7 +921,7 @@ Also discovered: `com.tuvium:claude-sdk-capture` (experiment-core) duplicates `i
 
 ```
 plans/learnings/
-├── LEARNINGS.md                       # Tier 1: Compacted summary (Stages 1-3)
+├── LEARNINGS.md                       # Tier 1: Compacted summary (Stages 1-3, updated each stage)
 ├── step-1.3-dataset.md                # Tier 2: Per-step details
 ├── step-1.4-test-quality-judge.md
 ├── step-1.5-stage1-summary.md
@@ -631,8 +935,19 @@ plans/learnings/
 ├── step-3.1-etl.md
 ├── step-3.2-variant-comparison.md
 ├── step-3.3-stage3-summary.md
-├── step-4.0-golden-rerun.md
-└── step-4.1-graduation.md
+├── step-4.0-context-review.md         # Stage 4: Two-Phase Variant
+├── step-4.1-two-phase-invoker.md
+├── step-4.2-prompts.md
+├── step-4.3-vibe-check.md
+├── step-4.4-stage4-summary.md
+├── step-5.0-full-suite-rerun.md       # Stage 5: Full Suite Re-Run
+├── step-5.1-analysis-update.md
+├── step-5.2-thesis-validation.md
+├── step-5.3-stage5-summary.md
+├── step-6.0-pet-clinic.md             # Stage 6: Graduation + Future
+├── step-6.1-cross-model.md
+├── step-6.2-graduation.md
+└── step-6.3-stage6-summary.md
 ```
 
 ---
@@ -692,3 +1007,4 @@ Every step's exit criteria must include:
 | 2026-03-03 | Added Step 2.2b: wire agent exhaust capture via SessionLogParser + consolidate PhaseCapture coordinates | Agent exhaust gap discovered |
 | 2026-03-03 | Replaced Stage 3 stubs with full data analysis pipeline (Steps 3.0-3.4) + Stage 4 graduation. Added Step 3.0 data audit for missing phases/efficiency/journal data. DuckDB + Python stack based on spring-ai-project-maint pattern. | Plan-to-roadmap from python-data-analysis-stack.md |
 | 2026-03-03 | Marked Stage 2 complete (full suite run done). Added Step 2.2c (golden judge). Consolidated Step 2.3/2.4 into 2.3. Replaced Stage 3 with detailed ETL + analysis steps. Step 3.0 = commit + efficiency gap. Step 3.1 = Python ETL. Step 3.2 = variant comparison + visualization. Step 3.3 = consolidation. | Post-full-suite-run analysis planning |
+| 2026-03-03 | Added Stage 4 (two-phase variant-d), Stage 5 (full suite re-run with golden judge + thesis validation), Stage 6 (Pet Clinic, cross-model, graduation). Driven by finding that KB injection didn't beat hardened prompt — two-layer value model diagnosis → structured L1 + L2 needed. | Research conversation session — Stripe analysis + two-phase design |

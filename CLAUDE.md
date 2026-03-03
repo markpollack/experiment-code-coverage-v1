@@ -16,7 +16,7 @@ Agent experiment: improve JUnit test coverage on Spring Boot projects using AI a
 
 **Source of truth**: `plans/ROADMAP.md`
 
-**Current state**: Stage 3 in progress. Full suite run complete (4 variants × 5 guides, Sonnet). Analysis pipeline built (Steps 3.0-3.2). Ready for Step 3.3 (consolidation).
+**Current state**: Stage 3 complete. Stage 4 next — implementing two-phase variant-d (structured knowledge consumption via explore-then-act pattern). See `plans/inbox/two-phase-variant-and-next-steps.md` for rationale.
 
 ## Architecture
 
@@ -46,17 +46,19 @@ ExperimentApp → ExperimentRunner → CodeCoverageAgentInvoker → CascadedJury
 |------|-------|--------|--------|
 | 0 | BuildSuccessJudge | agent-judge-exec | REJECT_ON_ANY_FAIL |
 | 1 | CoveragePreservationJudge | agent-judge-exec | REJECT_ON_ANY_FAIL |
-| 2 | CoverageImprovementJudge | agent-judge-exec | ACCEPT_ON_ALL_PASS |
+| 2 | CoverageImprovementJudge | agent-judge-exec | REJECT_ON_ANY_FAIL |
+| 2 | GoldenTestComparisonJudge | custom (JavaParser AST) | REJECT_ON_ANY_FAIL |
 | 3 | TestQualityJudge | custom (agent-based via AgentClient) | FINAL_TIER |
 
 ### Variants
 
-| Variant | Prompt | Knowledge | Tests |
-|---------|--------|-----------|-------|
-| control | v0-naive.txt | none | Prompt baseline |
-| variant-a | v1-hardened.txt | none | Prompt improvement |
-| variant-b | v2-with-kb.txt | 3 KB files | Knowledge effect |
-| variant-c | v2-with-kb.txt | 4 KB files | Knowledge depth |
+| Variant | Prompt | Knowledge | Phase | Tests |
+|---------|--------|-----------|-------|-------|
+| control | v0-naive.txt | none | single | Prompt baseline |
+| variant-a | v1-hardened.txt | none | single | Prompt improvement |
+| variant-b | v2-with-kb.txt | 3 KB files | single | Knowledge effect |
+| variant-c | v2-with-kb.txt | 4 KB files | single | Knowledge depth |
+| variant-d | v3-explore + v3-act | full KB | two-phase | Structured knowledge consumption |
 
 ## Directory Structure
 
