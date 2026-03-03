@@ -322,10 +322,10 @@ Also discovered: `com.tuvium:claude-sdk-capture` (experiment-core) duplicates `i
 - [x] Token counts and cost are non-zero in InvocationResult
 - [x] PhaseCapture coordinates consolidated to `io.github.markpollack:claude-code-capture`
 - [x] All tests pass: `./mvnw test` (21 tests + 372 experiment-core tests)
-- [ ] Create: `plans/learnings/step-2.2b-exhaust-capture.md`
-- [ ] Update `CLAUDE.md` with distilled learnings
+- [x] Create: `plans/learnings/step-2.2b-exhaust-capture.md`
+- [x] Update `CLAUDE.md` with distilled learnings (folded into Stage 3 consolidation)
 - [x] Update `ROADMAP.md` checkboxes
-- [ ] COMMIT
+- [x] COMMIT (across multiple commits: upstream changes + `e7696fd`)
 
 **Deliverables**: End-to-end agent exhaust capture, consolidated PhaseCapture coordinates
 
@@ -333,7 +333,7 @@ Also discovered: `com.tuvium:claude-sdk-capture` (experiment-core) duplicates `i
 
 ### Step 2.2c: Golden Test Comparison Judge
 
-**Status**: Complete (code done, uncommitted)
+**Status**: Complete
 
 **Context**: SWE-bench style evaluation — compare agent-written tests against reference golden tests from Spring developers using JavaParser AST analysis.
 
@@ -347,7 +347,7 @@ Also discovered: `com.tuvium:claude-sdk-capture` (experiment-core) duplicates `i
 **Exit criteria**:
 - [x] GoldenTestComparisonJudge compiles and passes tests
 - [x] All tests pass: `./mvnw test` — 34 tests
-- [ ] COMMIT
+- [x] COMMIT (`311a5ad`)
 
 **Deliverables**: `GoldenTestComparisonJudge.java`, `GoldenTestComparisonJudgeTest.java`
 
@@ -383,8 +383,8 @@ Also discovered: `com.tuvium:claude-sdk-capture` (experiment-core) duplicates `i
 **Exit criteria**:
 - [x] All 4 variants run with full exhaust capture
 - [x] Results in `results/code-coverage-experiment/`
-- [ ] Create: `plans/learnings/step-2.2-full-suite.md`
-- [ ] Update `CLAUDE.md` with distilled learnings
+- [x] Create: `plans/learnings/step-2.2-full-suite.md`
+- [x] Update `CLAUDE.md` with distilled learnings (folded into Stage 3 consolidation)
 - [x] Update `ROADMAP.md` checkboxes
 - [x] COMMIT (`8c13d2b`, `f317194`, `0e93a8d`)
 
@@ -395,24 +395,20 @@ Also discovered: `com.tuvium:claude-sdk-capture` (experiment-core) duplicates `i
 ### Step 2.3: Stage 2 Consolidation
 
 **Entry criteria**:
-- [ ] All Stage 2 steps complete (2.0–2.2c)
-- [ ] Read: all `plans/learnings/step-2.*` files from this stage
+- [x] All Stage 2 steps complete (2.0–2.2c)
+- [x] Read: all `plans/learnings/step-2.*` files from this stage
 
 **Work items**:
-- [ ] COMMIT golden judge + outstanding uncommitted changes
-- [ ] COMPACT learnings from Stage 2 into `plans/learnings/LEARNINGS.md`
-  - Golden dataset pivot rationale and results
-  - Efficiency evaluator wiring (ExperimentRunner vs invoker)
-  - Full suite results: prompt > KB for this dataset
-  - Known issues: efficiency gap, coverage metadata location
-- [ ] UPDATE `CLAUDE.md` with distilled learnings
+- [x] COMMIT golden judge + outstanding uncommitted changes (`311a5ad`)
+- [x] COMPACT learnings from Stage 2 into `plans/learnings/LEARNINGS.md` (folded into Step 3.3)
+- [x] UPDATE `CLAUDE.md` with distilled learnings
 
 **Exit criteria**:
-- [ ] All uncommitted work committed
-- [ ] `LEARNINGS.md` updated with Stage 2 compacted summary
-- [ ] Create: `plans/learnings/step-2.3-stage2-summary.md`
-- [ ] Update `CLAUDE.md` with distilled learnings
-- [ ] Update `ROADMAP.md` checkboxes
+- [x] All uncommitted work committed
+- [x] `LEARNINGS.md` updated with Stage 2 compacted summary (done in Step 3.3)
+- [x] Create: `plans/learnings/step-2.3-stage2-summary.md`
+- [x] Update `CLAUDE.md` with distilled learnings
+- [x] Update `ROADMAP.md` checkboxes
 - [ ] COMMIT
 
 **Deliverables**: Updated `LEARNINGS.md` covering Stages 1-2, clean git state
@@ -424,10 +420,10 @@ Also discovered: `com.tuvium:claude-sdk-capture` (experiment-core) duplicates `i
 ### Step 3.0: Commit + Investigate Efficiency Gap
 
 **Entry criteria**:
-- [ ] Stage 2 complete
-- [ ] Read: `plans/learnings/LEARNINGS.md` — compacted learnings through Stage 2
-- [ ] Read: `plans/inbox/python-data-analysis-stack.md` — analysis pipeline plan
-- [ ] Read: `plans/inbox/golden-judge-handoff.md` — golden judge context
+- [x] Stage 2 complete
+- [x] Read: `plans/learnings/LEARNINGS.md` — compacted learnings through Stage 2
+- [x] Read: `plans/inbox/python-data-analysis-stack.md` — analysis pipeline plan
+- [x] Read: `plans/inbox/golden-judge-handoff.md` — golden judge context
 
 **Context**: Full suite run complete (4 variants × 5 guides, Sonnet). Two data quality issues to resolve before analysis: (1) efficiency scores missing from variant-b/c, (2) golden judge uncommitted. All results use the latest full-suite run (timestamps 07:16-08:32 UTC 2026-03-03).
 
@@ -453,9 +449,9 @@ Also discovered: `com.tuvium:claude-sdk-capture` (experiment-core) duplicates `i
 ### Step 3.1: Python Environment + ETL
 
 **Entry criteria**:
-- [ ] Step 3.0 complete
-- [ ] Read: `plans/learnings/step-3.0-data-quality.md` — prior step learnings
-- [ ] Read: `plans/inbox/python-data-analysis-stack.md` — full analysis plan
+- [x] Step 3.0 complete
+- [x] Read: `plans/learnings/step-3.0-data-quality.md` — prior step learnings
+- [x] Read: `plans/inbox/python-data-analysis-stack.md` — full analysis plan
 
 **Reference** (patterns to follow):
 - `/home/mark/tuvium/projects/spring-ai-project-maint/scripts/parse_git_history.py` — raw → parquet ETL
@@ -513,8 +509,8 @@ Also discovered: `com.tuvium:claude-sdk-capture` (experiment-core) duplicates `i
 ### Step 3.2: Variant Comparison + Visualization
 
 **Entry criteria**:
-- [ ] Step 3.1 complete (parquet files available)
-- [ ] Read: `plans/learnings/step-3.1-etl.md` — prior step learnings
+- [x] Step 3.1 complete (parquet files available)
+- [x] Read: `plans/learnings/step-3.1-etl.md` — prior step learnings
 
 **Reference**:
 - `/home/mark/tuvium/projects/spring-ai-project-maint/scripts/plot_quadrants.py` — DuckDB → matplotlib
@@ -555,20 +551,47 @@ Also discovered: `com.tuvium:claude-sdk-capture` (experiment-core) duplicates `i
 - [x] Create: `plans/learnings/step-3.3-stage3-summary.md`
 - [x] Update `CLAUDE.md` with distilled learnings
 - [x] Update `ROADMAP.md` checkboxes
-- [ ] COMMIT
+- [x] COMMIT (`cb2976a`)
 
 **Deliverables**: Updated `LEARNINGS.md` covering Stages 1-3, findings summary
 
 ---
 
-## Stage 4: Graduation
+## Stage 4: Golden Judge Re-Run + Graduation
 
-### Step 4.0: Graduate Best Variant
+### Step 4.0: Full Suite Re-Run with Golden Judge
 
 **Entry criteria**:
-- [ ] Stage 3 complete
+- [x] Stage 3 complete
 - [ ] Read: `plans/learnings/LEARNINGS.md` — compacted learnings through Stage 3
 - [ ] Read: `analysis/findings-summary.md` — key findings
+
+**Context**: The full suite run (2026-03-03) did NOT include `GoldenTestComparisonJudge` — it was committed after the run. A re-run is needed to populate `golden_similarity` scores and validate the AST comparison against real agent output.
+
+**Work items**:
+- [ ] VERIFY `GoldenTestComparisonJudge` is wired in `ExperimentApp.buildJuryFactory()` tier 2
+- [ ] VERIFY `./mvnw test` — all tests pass
+- [ ] RUN full suite: `./mvnw compile exec:java -Dexec.args="--run-all-variants"` (from plain terminal)
+- [ ] UPDATE `scripts/load_results.py` with new run IDs
+- [ ] RE-RUN analysis pipeline: `load_results.py` → `variant_comparison.py` → `plot_variant_radar.py` → `generate_item_cards.py`
+- [ ] REVIEW golden_similarity scores — do they correlate with T3? Do they add signal?
+
+**Exit criteria**:
+- [ ] All 4 variants × 5 items have `golden_similarity` scores
+- [ ] Analysis outputs updated with golden comparison data
+- [ ] Create: `plans/learnings/step-4.0-golden-rerun.md`
+- [ ] Update `ROADMAP.md` checkboxes
+- [ ] COMMIT
+
+**Deliverables**: Complete result set with golden comparison, updated analysis
+
+---
+
+### Step 4.1: Graduate Best Variant
+
+**Entry criteria**:
+- [ ] Step 4.0 complete
+- [ ] Read: `plans/learnings/step-4.0-golden-rerun.md`
 
 **Work items**:
 - [ ] EXTRACT best variant → standalone agent project
@@ -576,7 +599,7 @@ Also discovered: `com.tuvium:claude-sdk-capture` (experiment-core) duplicates `i
 
 **Exit criteria**:
 - [ ] Best variant extracted
-- [ ] Create: `plans/learnings/step-4.0-graduation.md`
+- [ ] Create: `plans/learnings/step-4.1-graduation.md`
 - [ ] Update `CLAUDE.md` with distilled learnings
 - [ ] Update `ROADMAP.md` checkboxes
 - [ ] COMMIT
@@ -608,7 +631,8 @@ plans/learnings/
 ├── step-3.1-etl.md
 ├── step-3.2-variant-comparison.md
 ├── step-3.3-stage3-summary.md
-└── step-4.0-graduation.md
+├── step-4.0-golden-rerun.md
+└── step-4.1-graduation.md
 ```
 
 ---
