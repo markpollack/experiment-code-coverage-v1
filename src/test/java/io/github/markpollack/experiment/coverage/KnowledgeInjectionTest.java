@@ -12,7 +12,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Tests for knowledge file copying in {@link CodeCoverageAgentInvoker}.
+ * Tests for knowledge file copying and JaCoCo injection in {@link CodeCoverageAgentInvoker}.
  */
 class KnowledgeInjectionTest {
 
@@ -107,6 +107,86 @@ class KnowledgeInjectionTest {
 		invoker.copyKnowledge(workspace);
 
 		assertThat(workspace.resolve("knowledge")).doesNotExist();
+	}
+
+	// ==================== JaCoCo injection tests ====================
+
+	@Test
+	void ensureJaCoCo_injectsPluginWhenMissing() throws IOException {
+		Path workspace = tempDir.resolve("workspace");
+		Files.createDirectories(workspace);
+		Files.writeString(workspace.resolve("pom.xml"), """
+				<project>
+				  <build>
+				    <plugins>
+				      <plugin>
+				        <groupId>org.springframework.boot</groupId>
+				        <artifactId>spring-boot-maven-plugin</artifactId>
+				      </plugin>
+				    </plugins>
+				  </build>
+				</project>
+				""");
+
+		CodeCoverageAgentInvoker invoker = new CodeCoverageAgentInvoker();
+		invoker.ensureJaCoCoPlugin(workspace);
+
+		String pom = Files.readString(workspace.resolve("pom.xml"));
+		assertThat(pom).contains("jacoco-maven-plugin");
+		assertThat(pom).contains("prepare-agent");
+		assertThat(pom).contains("<phase>test</phase>");
+	}
+
+	@Test
+	void ensureJaCoCo_skipsWhenAlreadyPresent() throws IOException {
+		Path workspace = tempDir.resolve("workspace");
+		Files.createDirectories(workspace);
+		String originalPom = """
+				<project>
+				  <build>
+				    <plugins>
+				      <plugin>
+				        <groupId>org.jacoco</groupId>
+				        <artifactId>jacoco-maven-plugin</artifactId>
+				      </plugin>
+				    </plugins>
+				  </build>
+				</project>
+				""";
+		Files.writeString(workspace.resolve("pom.xml"), originalPom);
+
+		CodeCoverageAgentInvoker invoker = new CodeCoverageAgentInvoker();
+		invoker.ensureJaCoCoPlugin(workspace);
+
+		assertThat(Files.readString(workspace.resolve("pom.xml"))).isEqualTo(originalPom);
+	}
+
+	@Test
+	void ensureJaCoCo_noPom_doesNotThrow() {
+		Path workspace = tempDir.resolve("no-pom-workspace");
+
+		CodeCoverageAgentInvoker invoker = new CodeCoverageAgentInvoker();
+		invoker.ensureJaCoCoPlugin(workspace);
+		// No exception — just logs a warning
+	}
+
+	@Test
+	void ensureJaCoCo_noBuildSection_addsBuildAndPlugins() throws IOException {
+		Path workspace = tempDir.resolve("workspace");
+		Files.createDirectories(workspace);
+		Files.writeString(workspace.resolve("pom.xml"), """
+				<project>
+				  <dependencies/>
+				</project>
+				""");
+
+		CodeCoverageAgentInvoker invoker = new CodeCoverageAgentInvoker();
+		invoker.ensureJaCoCoPlugin(workspace);
+
+		String pom = Files.readString(workspace.resolve("pom.xml"));
+		assertThat(pom).contains("jacoco-maven-plugin");
+		assertThat(pom).contains("<build>");
+		assertThat(pom).contains("<plugins>");
 	}
 
 	@Test

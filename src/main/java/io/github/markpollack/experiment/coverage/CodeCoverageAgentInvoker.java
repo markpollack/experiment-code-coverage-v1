@@ -74,17 +74,20 @@ public class CodeCoverageAgentInvoker implements AgentInvoker {
 					context.metadata());
 		}
 
-		// 2. Measure baseline coverage
-		logger.info("Step 2: Measuring baseline coverage");
+		// 2. Ensure JaCoCo plugin is in pom.xml so baseline measurement works
+		ensureJaCoCoPlugin(workspace);
+
+		// 3. Measure baseline coverage
+		logger.info("Step 3: Measuring baseline coverage");
 		CoverageMetrics baseline = measureCoverage(workspace);
 		logger.info("Baseline coverage: line={}%, branch={}%",
 				baseline.lineCoverage(), baseline.branchCoverage());
 
-		// 3. Copy knowledge files into workspace (if configured)
+		// 4. Copy knowledge files into workspace (if configured)
 		copyKnowledge(workspace);
 
-		// 4. Invoke agent with prompt
-		logger.info("Step 4: Invoking agent (model={})", context.model());
+		// 5. Invoke agent with prompt
+		logger.info("Step 5: Invoking agent (model={})", context.model());
 		AgentModel agentModel = createAgentModel(context.model(), workspace);
 		AgentClient client = AgentClient.create(agentModel);
 
@@ -101,8 +104,8 @@ public class CodeCoverageAgentInvoker implements AgentInvoker {
 					context.metadata());
 		}
 
-		// 5. Measure final coverage
-		logger.info("Step 5: Measuring final coverage");
+		// 6. Measure final coverage
+		logger.info("Step 6: Measuring final coverage");
 		CoverageMetrics finalCov = measureCoverage(workspace);
 		double improvement = finalCov.lineCoverage() - baseline.lineCoverage();
 		logger.info("Final coverage: line={}%, branch={}% (improvement: {}pp)",
@@ -145,12 +148,12 @@ public class CodeCoverageAgentInvoker implements AgentInvoker {
 
 		if (knowledgeFiles.contains("index.md")) {
 			// Full tree copy — agent navigates via index.md
-			logger.info("Step 3: Copying full knowledge tree from {}", knowledgeSourceDir);
+			logger.info("Step 4: Copying full knowledge tree from {}", knowledgeSourceDir);
 			copyDirectoryRecursively(knowledgeSourceDir, targetDir);
 		}
 		else {
 			// Targeted file copy — only specific files
-			logger.info("Step 3: Copying {} targeted knowledge files", knowledgeFiles.size());
+			logger.info("Step 4: Copying {} targeted knowledge files", knowledgeFiles.size());
 			for (String relativePath : knowledgeFiles) {
 				Path source = knowledgeSourceDir.resolve(relativePath);
 				Path target = targetDir.resolve(relativePath);
@@ -163,6 +166,73 @@ public class CodeCoverageAgentInvoker implements AgentInvoker {
 					throw new UncheckedIOException("Failed to copy knowledge file: " + relativePath, ex);
 				}
 			}
+		}
+	}
+
+	private static final String JACOCO_PLUGIN_SNIPPET = """
+			<plugin>
+				<groupId>org.jacoco</groupId>
+				<artifactId>jacoco-maven-plugin</artifactId>
+				<version>0.8.12</version>
+				<executions>
+					<execution>
+						<id>default</id>
+						<goals>
+							<goal>prepare-agent</goal>
+						</goals>
+					</execution>
+					<execution>
+						<id>report</id>
+						<phase>test</phase>
+						<goals>
+							<goal>report</goal>
+						</goals>
+					</execution>
+				</executions>
+			</plugin>
+			""";
+
+	/**
+	 * Ensure the JaCoCo Maven plugin is present in pom.xml so that baseline
+	 * coverage measurement works even if the project doesn't ship with it.
+	 */
+	void ensureJaCoCoPlugin(Path workspace) {
+		Path pomPath = workspace.resolve("pom.xml");
+		if (!Files.isRegularFile(pomPath)) {
+			logger.warn("No pom.xml found in workspace — skipping JaCoCo injection");
+			return;
+		}
+
+		try {
+			String pom = Files.readString(pomPath);
+			if (pom.contains("jacoco-maven-plugin")) {
+				logger.info("Step 2: JaCoCo plugin already present");
+				return;
+			}
+
+			logger.info("Step 2: Injecting JaCoCo plugin into pom.xml");
+
+			String updated;
+			if (pom.contains("</plugins>")) {
+				// Insert before closing </plugins> tag
+				updated = pom.replace("</plugins>", JACOCO_PLUGIN_SNIPPET + "    </plugins>");
+			}
+			else if (pom.contains("</build>")) {
+				// No <plugins> section — add one
+				updated = pom.replace("</build>",
+						"    <plugins>\n" + JACOCO_PLUGIN_SNIPPET + "    </plugins>\n  </build>");
+			}
+			else {
+				// No <build> section at all — add before </project>
+				updated = pom.replace("</project>",
+						"  <build>\n    <plugins>\n" + JACOCO_PLUGIN_SNIPPET + "    </plugins>\n  </build>\n</project>");
+			}
+
+			Files.writeString(pomPath, updated);
+			logger.info("JaCoCo plugin injected into {}", pomPath);
+		}
+		catch (IOException ex) {
+			throw new UncheckedIOException("Failed to read/write pom.xml for JaCoCo injection", ex);
 		}
 	}
 
@@ -192,27 +262,20 @@ public class CodeCoverageAgentInvoker implements AgentInvoker {
 	private String buildPrompt(String basePrompt, CoverageMetrics baseline) {
 		StringBuilder sb = new StringBuilder(basePrompt);
 		sb.append("\n\n## Current Coverage Metrics\n");
-		sb.append("- Line coverage: ").append(baseline.lineCoverage()).append("%\n");
-		sb.append("- Branch coverage: ").append(baseline.branchCoverage()).append("%\n");
-		if (baseline.lineCoverage() == 0.0) {
-			sb.append("\nNote: No JaCoCo plugin detected. You will need to add it to the pom.xml.\n");
-		}
+		sb.append("- Line coverage: ").append(String.format("%.1f", baseline.lineCoverage())).append("%\n");
+		sb.append("- Branch coverage: ").append(String.format("%.1f", baseline.branchCoverage())).append("%\n");
+		sb.append("- Lines covered: ").append(baseline.linesCovered()).append("/").append(baseline.linesTotal()).append("\n");
+		sb.append("\nNote: JaCoCo is already configured. Run `./mvnw clean test jacoco:report` to regenerate coverage.\n");
 		return sb.toString();
 	}
 
 	private CoverageMetrics measureCoverage(Path workspace) {
-		try {
-			// Try running tests with JaCoCo report generation
-			BuildResult result = MavenBuildRunner.runBuild(workspace, 10, "clean", "test", "jacoco:report");
-			if (result.success()) {
-				return JaCoCoReportParser.parse(workspace);
-			}
+		BuildResult result = MavenBuildRunner.runBuild(workspace, 10, "clean", "test");
+		if (result.success()) {
+			return JaCoCoReportParser.parse(workspace);
 		}
-		catch (Exception ex) {
-			logger.debug("Coverage measurement failed (JaCoCo may not be configured): {}", ex.getMessage());
-		}
-		// Return zeros if JaCoCo isn't configured — agent will add it
-		return new CoverageMetrics(0.0, 0.0, 0.0, 0, 0, 0, 0, 0, 0, "No JaCoCo report");
+		logger.warn("Test execution failed during coverage measurement: {}", result.output().substring(0, Math.min(500, result.output().length())));
+		return new CoverageMetrics(0.0, 0.0, 0.0, 0, 0, 0, 0, 0, 0, "Tests failed");
 	}
 
 	private AgentModel createAgentModel(String model, Path workingDirectory) {

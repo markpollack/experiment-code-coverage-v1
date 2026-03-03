@@ -199,7 +199,7 @@ public class ExperimentApp {
 			.addJudge(1, new CoveragePreservationJudge())
 			.tierPolicy(1, TierPolicy.REJECT_ON_ANY_FAIL)
 			.addJudge(2, new CoverageImprovementJudge())
-			.tierPolicy(2, TierPolicy.ACCEPT_ON_ALL_PASS)
+			.tierPolicy(2, TierPolicy.REJECT_ON_ANY_FAIL)
 			.addJudge(3, new TestQualityJudge(
 					TestQualityJudge.defaultAgentClientFactory("claude-sonnet-4-6", Duration.ofMinutes(3)),
 					projectRoot.resolve("prompts/judge-practice-adherence.txt")))
