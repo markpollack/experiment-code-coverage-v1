@@ -1,6 +1,13 @@
 package io.github.markpollack.experiment.coverage;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.file.FileVisitResult;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.StandardCopyOption;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.List;
 import java.util.Map;
 
@@ -10,6 +17,7 @@ import ai.tuvium.experiment.agent.InvocationContext;
 import ai.tuvium.experiment.agent.InvocationResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.lang.Nullable;
 import org.springaicommunity.agents.client.AgentClient;
 import org.springaicommunity.agents.client.AgentClientResponse;
 import org.springaicommunity.agents.claude.ClaudeAgentModel;
@@ -19,7 +27,6 @@ import org.springaicommunity.judge.coverage.JaCoCoReportParser;
 import org.springaicommunity.judge.coverage.JaCoCoReportParser.CoverageMetrics;
 import org.springaicommunity.judge.exec.util.MavenBuildRunner;
 import org.springaicommunity.judge.exec.util.MavenBuildRunner.BuildResult;
-import org.springaicommunity.judge.exec.util.MavenTestRunner;
 
 /**
  * Invokes an AI agent to improve JUnit test coverage on a Spring Boot Maven project.
@@ -27,6 +34,7 @@ import org.springaicommunity.judge.exec.util.MavenTestRunner;
  * <p>Workflow:</p>
  * <ol>
  *   <li>Measure baseline coverage via JaCoCo</li>
+ *   <li>Copy knowledge files into workspace (if configured)</li>
  *   <li>Invoke agent with coverage improvement prompt</li>
  *   <li>Measure final coverage</li>
  *   <li>Store baseline/final metrics in result metadata</li>
@@ -35,6 +43,21 @@ import org.springaicommunity.judge.exec.util.MavenTestRunner;
 public class CodeCoverageAgentInvoker implements AgentInvoker {
 
 	private static final Logger logger = LoggerFactory.getLogger(CodeCoverageAgentInvoker.class);
+
+	@Nullable
+	private final Path knowledgeSourceDir;
+
+	@Nullable
+	private final List<String> knowledgeFiles;
+
+	public CodeCoverageAgentInvoker() {
+		this(null, null);
+	}
+
+	public CodeCoverageAgentInvoker(@Nullable Path knowledgeSourceDir, @Nullable List<String> knowledgeFiles) {
+		this.knowledgeSourceDir = knowledgeSourceDir;
+		this.knowledgeFiles = knowledgeFiles;
+	}
 
 	@Override
 	public InvocationResult invoke(InvocationContext context) throws AgentInvocationException {
@@ -57,8 +80,11 @@ public class CodeCoverageAgentInvoker implements AgentInvoker {
 		logger.info("Baseline coverage: line={}%, branch={}%",
 				baseline.lineCoverage(), baseline.branchCoverage());
 
-		// 3. Invoke agent with prompt (prompt includes knowledge if variant uses it)
-		logger.info("Step 3: Invoking agent (model={})", context.model());
+		// 3. Copy knowledge files into workspace (if configured)
+		copyKnowledge(workspace);
+
+		// 4. Invoke agent with prompt
+		logger.info("Step 4: Invoking agent (model={})", context.model());
 		AgentModel agentModel = createAgentModel(context.model(), workspace);
 		AgentClient client = AgentClient.create(agentModel);
 
@@ -75,8 +101,8 @@ public class CodeCoverageAgentInvoker implements AgentInvoker {
 					context.metadata());
 		}
 
-		// 4. Measure final coverage
-		logger.info("Step 4: Measuring final coverage");
+		// 5. Measure final coverage
+		logger.info("Step 5: Measuring final coverage");
 		CoverageMetrics finalCov = measureCoverage(workspace);
 		double improvement = finalCov.lineCoverage() - baseline.lineCoverage();
 		logger.info("Final coverage: line={}%, branch={}% (improvement: {}pp)",
@@ -102,6 +128,65 @@ public class CodeCoverageAgentInvoker implements AgentInvoker {
 				null,           // sessionId
 				enrichedMetadata
 		);
+	}
+
+	/**
+	 * Copy knowledge files into the workspace for the agent to discover.
+	 * If knowledgeFiles contains "index.md", copies the entire knowledge tree
+	 * (variant-c: JIT navigation from index). Otherwise copies only the listed
+	 * files preserving relative paths (variant-b: targeted files).
+	 */
+	void copyKnowledge(Path workspace) {
+		if (knowledgeSourceDir == null || knowledgeFiles == null || knowledgeFiles.isEmpty()) {
+			return;
+		}
+
+		Path targetDir = workspace.resolve("knowledge");
+
+		if (knowledgeFiles.contains("index.md")) {
+			// Full tree copy — agent navigates via index.md
+			logger.info("Step 3: Copying full knowledge tree from {}", knowledgeSourceDir);
+			copyDirectoryRecursively(knowledgeSourceDir, targetDir);
+		}
+		else {
+			// Targeted file copy — only specific files
+			logger.info("Step 3: Copying {} targeted knowledge files", knowledgeFiles.size());
+			for (String relativePath : knowledgeFiles) {
+				Path source = knowledgeSourceDir.resolve(relativePath);
+				Path target = targetDir.resolve(relativePath);
+				try {
+					Files.createDirectories(target.getParent());
+					Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING);
+					logger.debug("Copied knowledge file: {}", relativePath);
+				}
+				catch (IOException ex) {
+					throw new UncheckedIOException("Failed to copy knowledge file: " + relativePath, ex);
+				}
+			}
+		}
+	}
+
+	private void copyDirectoryRecursively(Path source, Path target) {
+		try {
+			Files.walkFileTree(source, new SimpleFileVisitor<>() {
+				@Override
+				public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
+					Path targetSubDir = target.resolve(source.relativize(dir));
+					Files.createDirectories(targetSubDir);
+					return FileVisitResult.CONTINUE;
+				}
+
+				@Override
+				public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+					Path targetFile = target.resolve(source.relativize(file));
+					Files.copy(file, targetFile, StandardCopyOption.REPLACE_EXISTING);
+					return FileVisitResult.CONTINUE;
+				}
+			});
+		}
+		catch (IOException ex) {
+			throw new UncheckedIOException("Failed to copy knowledge directory: " + source, ex);
+		}
 	}
 
 	private String buildPrompt(String basePrompt, CoverageMetrics baseline) {

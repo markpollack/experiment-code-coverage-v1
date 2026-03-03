@@ -127,10 +127,13 @@ public class ExperimentApp {
 	}
 
 	/**
-	 * Create a per-variant invoker. Subclasses or future steps can override
-	 * to inject knowledge files based on variant config.
+	 * Create a per-variant invoker with optional knowledge injection.
 	 */
 	CodeCoverageAgentInvoker createInvoker(VariantSpec variant) {
+		if (variant.knowledgeDir() != null && !variant.knowledgeFiles().isEmpty()) {
+			Path knowledgeSourceDir = projectRoot.resolve(variant.knowledgeDir());
+			return new CodeCoverageAgentInvoker(knowledgeSourceDir, variant.knowledgeFiles());
+		}
 		return new CodeCoverageAgentInvoker();
 	}
 

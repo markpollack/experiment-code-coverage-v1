@@ -114,8 +114,13 @@ For full details: `plans/learnings/LEARNINGS.md`
 
 **Bootstrap wiring** (Step 2.0):
 - `ExperimentApp.main()` wires: `loadConfig()` → `buildJuryFactory()` → `FileSystemResultStore` → dispatch
-- `AgentInvoker` removed from constructor — per-variant `CodeCoverageAgentInvoker` created via `createInvoker(VariantSpec)` in `runVariant()` (seam for Step 2.1 knowledge injection)
+- `AgentInvoker` removed from constructor — per-variant `CodeCoverageAgentInvoker` created via `createInvoker(VariantSpec)` in `runVariant()`
 - `CoverageImprovementJudge` existed in agent-judge source but was missing from installed JAR — re-install from `~/community/agent-judge` was needed. Always verify installed JARs match source.
+
+**Knowledge injection** (Step 2.1):
+- `CodeCoverageAgentInvoker` has optional `knowledgeSourceDir` + `knowledgeFiles` — copies files into `workspace/knowledge/` before agent invocation
+- `index.md` in knowledgeFiles triggers full recursive tree copy (variant-c); otherwise only listed files are copied (variant-b)
+- `copyKnowledge()` is package-private for direct unit testing (same pattern as `parseJudgment()`)
 
 ## Knowledge Extraction Backlog
 

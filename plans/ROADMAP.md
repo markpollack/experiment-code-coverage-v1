@@ -211,7 +211,7 @@ Grow a code coverage improvement agent through 4 variants across 5 Spring Gettin
 - [x] Create: `plans/learnings/step-2.0-bootstrap.md`
 - [x] Update `CLAUDE.md` with distilled learnings
 - [x] Update `ROADMAP.md` checkboxes
-- [ ] COMMIT
+- [x] COMMIT (`e41b24b`)
 
 **Deliverables**: Runnable `ExperimentApp` with full component wiring, CLI argument parsing
 
@@ -220,30 +220,30 @@ Grow a code coverage improvement agent through 4 variants across 5 Spring Gettin
 ### Step 2.1: Add JIT Knowledge Injection
 
 **Entry criteria**:
-- [ ] Step 2.0 complete
-- [ ] Read: `plans/learnings/step-2.0-bootstrap.md` — prior step learnings
+- [x] Step 2.0 complete
+- [x] Read: `plans/learnings/step-2.0-bootstrap.md` — prior step learnings
 
 **Work items**:
-- [ ] ADD optional knowledge config to `CodeCoverageAgentInvoker`:
+- [x] ADD optional knowledge config to `CodeCoverageAgentInvoker`:
   - Fields: `@Nullable Path knowledgeSourceDir`, `@Nullable List<String> knowledgeFiles`
   - New constructor alongside existing no-arg constructor
-- [ ] IMPLEMENT knowledge file copying in `invoke()` (after baseline measurement, before agent invocation):
+- [x] IMPLEMENT knowledge file copying in `invoke()` (after baseline measurement, before agent invocation):
   - If `knowledgeFiles` contains `index.md` → copy entire `knowledgeSourceDir` recursively (variant-c: full KB tree for JIT navigation)
   - Otherwise → copy only listed files preserving relative paths (variant-b: 3 targeted files)
   - Target: `workspace/knowledge/` directory
-- [ ] WIRE per-variant invoker creation in `ExperimentApp.runVariant()`:
+- [x] WIRE per-variant invoker creation in `ExperimentApp.runVariant()`:
   - `variant.knowledgeDir() != null` → `new CodeCoverageAgentInvoker(projectRoot.resolve(knowledgeDir), knowledgeFiles)`
   - Otherwise → `new CodeCoverageAgentInvoker()`
-- [ ] VERIFY: `./mvnw test` — existing tests pass, add test for knowledge file copying if feasible
+- [x] VERIFY: `./mvnw test` — existing tests pass, add test for knowledge file copying if feasible
 
 **Exit criteria**:
-- [ ] Control/variant-a invoke with no knowledge (empty workspace)
-- [ ] variant-b copies 3 targeted files to `workspace/knowledge/coverage-mechanics/`
-- [ ] variant-c copies full KB tree to `workspace/knowledge/` (agent can JIT navigate from index.md)
-- [ ] All tests pass: `./mvnw test`
-- [ ] Create: `plans/learnings/step-2.1-knowledge-injection.md`
-- [ ] Update `CLAUDE.md` with distilled learnings
-- [ ] Update `ROADMAP.md` checkboxes
+- [x] Control/variant-a invoke with no knowledge (empty workspace)
+- [x] variant-b copies 3 targeted files to `workspace/knowledge/coverage-mechanics/`
+- [x] variant-c copies full KB tree to `workspace/knowledge/` (agent can JIT navigate from index.md)
+- [x] All tests pass: `./mvnw test`
+- [x] Create: `plans/learnings/step-2.1-knowledge-injection.md`
+- [x] Update `CLAUDE.md` with distilled learnings
+- [x] Update `ROADMAP.md` checkboxes
 - [ ] COMMIT
 
 **Deliverables**: JIT knowledge injection via workspace file copying, per-variant invoker construction
