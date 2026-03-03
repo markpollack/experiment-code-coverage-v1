@@ -10,7 +10,12 @@ import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
+import ai.tuvium.experiment.diagnostic.DefaultEfficiencyEvaluator;
+import ai.tuvium.experiment.diagnostic.EfficiencyConfig;
+import ai.tuvium.experiment.diagnostic.EfficiencyReport;
+import ai.tuvium.experiment.diagnostic.ReasoningContext;
 import io.github.markpollack.journal.claude.PhaseCapture;
 import ai.tuvium.experiment.agent.AgentInvocationException;
 import ai.tuvium.experiment.agent.AgentInvoker;
@@ -139,7 +144,7 @@ public class CodeCoverageAgentInvoker implements AgentInvoker {
 
 		List<PhaseCapture> phases = capture != null ? List.of(capture) : List.of();
 
-		return InvocationResult.completed(
+		InvocationResult invocationResult = InvocationResult.completed(
 				phases,
 				capture != null ? capture.inputTokens() : 0,
 				capture != null ? capture.outputTokens() : 0,
@@ -149,6 +154,24 @@ public class CodeCoverageAgentInvoker implements AgentInvoker {
 				capture != null ? capture.sessionId() : null,
 				enrichedMetadata
 		);
+
+		// 8. Evaluate efficiency from agent trajectory
+		logger.info("Step 8: Evaluating efficiency");
+		ReasoningContext reasoningContext = new ReasoningContext(
+				null, null, Set.of(), phases,
+				null, null, List.of(), workspace, null);
+		EfficiencyReport efficiencyReport = new DefaultEfficiencyEvaluator()
+				.evaluate(invocationResult, reasoningContext, EfficiencyConfig.defaults());
+		for (var entry : efficiencyReport.scores().entrySet()) {
+			enrichedMetadata.put(entry.getKey(), String.valueOf(entry.getValue()));
+		}
+		logger.info("Efficiency: composite={}, checks={}",
+				String.format("%.3f", efficiencyReport.compositeScore()),
+				efficiencyReport.checks().stream()
+						.map(c -> c.metric() + "=" + String.format("%.3f", c.normalizedScore()))
+						.toList());
+
+		return invocationResult;
 	}
 
 	/**

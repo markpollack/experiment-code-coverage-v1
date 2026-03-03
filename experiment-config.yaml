@@ -1,5 +1,5 @@
 experimentName: code-coverage-experiment
-defaultModel: claude-haiku-4-5-20251001
+defaultModel: claude-sonnet-4-6
 timeoutMinutes: 15
 variants:
   - name: control
