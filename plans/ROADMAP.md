@@ -373,13 +373,12 @@ Also discovered: `com.tuvium:claude-sdk-capture` (experiment-core) duplicates `i
 |---------|-----------|--------|----------------|------|
 | Control | 100% | 0.62 | 0.878 | $4.57 |
 | Variant-A | 100% | 0.80 | 0.937 | $4.17 |
-| Variant-B | 80% | 0.69 | — | $6.27 |
-| Variant-C | 80% | 0.74 | — | $5.12 |
+| Variant-B | 100% | 0.697 | 0.837 | $4.98 |
+| Variant-C | 100% | 0.757 | 0.823 | $4.55 |
 
-**Known issues**:
-- Efficiency scores missing from variant-b/c (ExperimentRunner catches exception silently)
-- Coverage metadata in `invocationResult.metadata`, not `item.metadata`
-- gs-messaging-stomp-websocket failed in variant-b/c (T3=0.45)
+**Known issues** (resolved in Step 3.0):
+- ~~Efficiency scores missing from variant-b/c~~ — was a run selection bug (stale overlapping results in index.json)
+- Coverage metadata in `invocationResult.metadata`, not `item.metadata` — handled in ETL
 
 **Exit criteria**:
 - [x] All 4 variants run with full exhaust capture
@@ -433,22 +432,19 @@ Also discovered: `com.tuvium:claude-sdk-capture` (experiment-core) duplicates `i
 **Context**: Full suite run complete (4 variants × 5 guides, Sonnet). Two data quality issues to resolve before analysis: (1) efficiency scores missing from variant-b/c, (2) golden judge uncommitted. All results use the latest full-suite run (timestamps 07:16-08:32 UTC 2026-03-03).
 
 **Work items**:
-- [ ] COMMIT golden judge + outstanding uncommitted changes (pom.xml, GoldenTestComparisonJudge.java, GoldenTestComparisonJudgeTest.java, ExperimentApp.java)
-- [ ] INVESTIGATE efficiency gap: why `efficiency.*` scores absent from variant-b/c:
-  - GREP `full-suite-run.log` for "Efficiency evaluation failed" WARN (ExperimentRunner line 197)
-  - READ `DefaultEfficiencyEvaluator.evaluate()` — what conditions throw?
-  - CHECK if variant-b/c phases have different content (KB reading changes PhaseCapture shape?)
-  - If root cause found → FIX upstream, document for re-run
-  - If not reproducible → document as known gap, ETL handles nullable efficiency columns
-- [ ] DOCUMENT findings in `analysis/data-quality-notes.md`
+- [x] COMMIT golden judge + outstanding uncommitted changes (pom.xml, GoldenTestComparisonJudge.java, GoldenTestComparisonJudgeTest.java, ExperimentApp.java)
+- [x] INVESTIGATE efficiency gap: why `efficiency.*` scores absent from variant-b/c:
+  - Root cause: stale overlapping run entries in index.json — not a code bug
+  - All 4 variants have efficiency scores when using correct run IDs
+- [x] DOCUMENT findings in `analysis/data-quality-notes.md`
 
 **Exit criteria**:
-- [ ] All uncommitted work committed
-- [ ] Efficiency gap root cause identified (or documented as unknown)
-- [ ] Create: `plans/learnings/step-3.0-data-quality.md`
-- [ ] Update `CLAUDE.md` with distilled learnings
-- [ ] Update `ROADMAP.md` checkboxes
-- [ ] COMMIT
+- [x] All uncommitted work committed (`311a5ad`)
+- [x] Efficiency gap root cause identified — run selection bug, not missing data
+- [x] Create: `plans/learnings/step-3.0-data-quality.md`
+- [x] Update `CLAUDE.md` with distilled learnings
+- [x] Update `ROADMAP.md` checkboxes
+- [x] COMMIT (`311a5ad`)
 
 **Deliverables**: Clean git state, efficiency gap analysis, `analysis/data-quality-notes.md`
 
@@ -467,11 +463,11 @@ Also discovered: `com.tuvium:claude-sdk-capture` (experiment-core) duplicates `i
 - Pattern: plain Python, no CLI framework, `duckdb.connect()` in-process, `if __name__ == "__main__": main()`
 
 **Work items**:
-- [ ] CREATE `requirements.txt`: `duckdb`, `pandas>=2.0`, `matplotlib>=3.7`, `numpy>=1.24`
-- [ ] SETUP Python env: `uv venv && uv pip install -r requirements.txt`
-- [ ] CREATE directories: `data/curated/`, `analysis/figures/`, `analysis/tables/`, `analysis/cards/`
-- [ ] ADD to `.gitignore`: `data/curated/`, `*.parquet`, `.venv/`
-- [ ] WRITE `scripts/load_results.py` — ETL: read result JSON → normalize into 3 parquet files:
+- [x] CREATE `requirements.txt`: `duckdb`, `pandas>=2.0`, `matplotlib>=3.7`, `numpy>=1.24`
+- [x] SETUP Python env: `uv venv && uv pip install -r requirements.txt`
+- [x] CREATE directories: `data/curated/`, `analysis/figures/`, `analysis/tables/`, `analysis/cards/`
+- [x] ADD to `.gitignore`: `data/curated/`, `*.parquet`, `.venv/`
+- [x] WRITE `scripts/load_results.py` — ETL: read result JSON → normalize into 3 parquet files:
 
   **`data/curated/runs.parquet`** — one row per variant run:
   `run_id, variant, model, timestamp, pass_rate, total_cost_usd, total_duration_ms, item_count, run_group`
@@ -498,16 +494,16 @@ Also discovered: `com.tuvium:claude-sdk-capture` (experiment-core) duplicates `i
 
   **Run selection**: latest `index.json` entry per variant. Tag `run_group = "full-suite-2026-03-03"`.
 
-- [ ] VERIFY: run ETL, check parquet with `duckdb.sql("SELECT variant, count(*) FROM '...' GROUP BY variant")`
-- [ ] VERIFY: 5 items per variant, 20 total rows
+- [x] VERIFY: run ETL, check parquet with `duckdb.sql("SELECT variant, count(*) FROM '...' GROUP BY variant")`
+- [x] VERIFY: 5 items per variant, 20 total rows
 
 **Exit criteria**:
-- [ ] Python environment working (`uv venv` + dependencies)
-- [ ] `scripts/load_results.py` produces 3 parquet files
-- [ ] DuckDB queries work against parquet
-- [ ] Create: `plans/learnings/step-3.1-etl.md`
-- [ ] Update `CLAUDE.md` with Python env + run instructions
-- [ ] Update `ROADMAP.md` checkboxes
+- [x] Python environment working (`uv venv` + dependencies)
+- [x] `scripts/load_results.py` produces 3 parquet files
+- [x] DuckDB queries work against parquet
+- [x] Create: `plans/learnings/step-3.1-etl.md`
+- [x] Update `CLAUDE.md` with Python env + run instructions
+- [x] Update `ROADMAP.md` checkboxes
 - [ ] COMMIT
 
 **Deliverables**: Python env, `scripts/load_results.py`, parquet files in `data/curated/`
@@ -524,34 +520,18 @@ Also discovered: `com.tuvium:claude-sdk-capture` (experiment-core) duplicates `i
 - `/home/mark/tuvium/projects/spring-ai-project-maint/scripts/plot_quadrants.py` — DuckDB → matplotlib
 
 **Work items**:
-- [ ] WRITE `scripts/variant_comparison.py` — core ablation analysis:
-  - Per-variant aggregates: avg coverage gain, adherence, efficiency, cost, pass %
-  - Per-item breakdown pivoted by variant
-  - Output: `analysis/tables/variant-comparison.md` + stdout
-  - Key SQL:
-    ```sql
-    SELECT variant, AVG(coverage_delta), AVG(t3_adherence),
-           AVG(eff_composite), AVG(cost_usd),
-           SUM(CASE WHEN passed THEN 1 ELSE 0 END) * 100.0 / COUNT(*) AS pass_pct
-    FROM item_results GROUP BY variant ORDER BY variant;
-    ```
-- [ ] WRITE `scripts/plot_variant_radar.py` — radar/spider chart:
-  - One polygon per variant: correctness (coverage_delta/50, capped 1.0), adherence (t3), efficiency
-  - Matplotlib, DPI 150, tight layout, legend
-  - Output: `analysis/figures/variant-radar.png`
-- [ ] WRITE `scripts/generate_item_cards.py` — per-item detail cards:
-  - For each item × variant: coverage, all scores, efficiency, cost
-  - Output: `analysis/cards/{item_slug}.md`
-  - Useful for debugging gs-messaging-stomp-websocket failure
-- [ ] RUN all scripts, review outputs
+- [x] WRITE `scripts/variant_comparison.py` — core ablation analysis
+- [x] WRITE `scripts/plot_variant_radar.py` — radar/spider chart
+- [x] WRITE `scripts/generate_item_cards.py` — per-item detail cards
+- [x] RUN all scripts, review outputs
 
 **Exit criteria**:
-- [ ] `analysis/tables/variant-comparison.md` — aggregate scores
-- [ ] `analysis/figures/variant-radar.png` — three-dimension radar
-- [ ] `analysis/cards/*.md` — per-item detail cards
-- [ ] Create: `plans/learnings/step-3.2-variant-comparison.md`
-- [ ] Update `CLAUDE.md` with distilled learnings
-- [ ] Update `ROADMAP.md` checkboxes
+- [x] `analysis/tables/variant-comparison.md` — aggregate scores
+- [x] `analysis/figures/variant-radar.png` — three-dimension radar
+- [x] `analysis/cards/*.md` — per-item detail cards (5 items)
+- [x] Create: `plans/learnings/step-3.2-variant-comparison.md`
+- [x] Update `CLAUDE.md` with distilled learnings
+- [x] Update `ROADMAP.md` checkboxes
 - [ ] COMMIT
 
 **Deliverables**: Variant comparison table, radar chart, item cards

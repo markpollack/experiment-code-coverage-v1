@@ -16,7 +16,7 @@ Agent experiment: improve JUnit test coverage on Spring Boot projects using AI a
 
 **Source of truth**: `plans/ROADMAP.md`
 
-**Current state**: Stage 2 in progress. Step 2.2a (pipeline validation) complete. Upstream metadata fixes installed. Ready for Step 2.2 (control variant run).
+**Current state**: Stage 3 in progress. Full suite run complete (4 variants × 5 guides, Sonnet). Analysis pipeline built (Steps 3.0-3.2). Ready for Step 3.3 (consolidation).
 
 ## Architecture
 
@@ -149,6 +149,25 @@ For full details: `plans/learnings/LEARNINGS.md`
 **Claude nesting workaround**: If you must run from within a Claude Code session, use `~/scripts/claude-run-stream.sh` (real-time output via journalctl) or `~/scripts/claude-run.sh` (buffered output to file). Both use `systemd-run` to escape process tree detection.
 
 Results are written to `results/` directory as JSON. Workspaces are preserved under `results/<experiment>/<run-id>/workspaces/`.
+
+## Analysis Pipeline
+
+Python-based analysis using DuckDB + parquet. Reads result JSON, produces tables/charts/cards.
+
+```bash
+# Setup (one-time)
+uv venv && uv pip install -r requirements.txt
+
+# Run analysis (regenerates all outputs)
+.venv/bin/python scripts/load_results.py           # JSON → parquet ETL
+.venv/bin/python scripts/variant_comparison.py      # analysis/tables/variant-comparison.md
+.venv/bin/python scripts/plot_variant_radar.py      # analysis/figures/variant-radar.png
+.venv/bin/python scripts/generate_item_cards.py     # analysis/cards/{item_slug}.md
+```
+
+**Run selection**: `load_results.py` uses explicit run IDs (not "latest in index") to avoid stale overlapping run entries. Update `FULL_SUITE_RUN` dict when adding new run groups.
+
+**Data quality**: Coverage metadata is in `invocationResult.metadata` (strings parsed to float). Judge details are deduplicated during extraction.
 
 ## Knowledge Extraction Backlog
 

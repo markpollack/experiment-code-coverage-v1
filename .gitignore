@@ -15,3 +15,12 @@ target/
 results/runs/
 dataset/workspaces/
 dataset/items/*/before/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Analysis data (generated)
+data/curated/
+*.parquet
