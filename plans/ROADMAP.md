@@ -504,7 +504,7 @@ Also discovered: `com.tuvium:claude-sdk-capture` (experiment-core) duplicates `i
 - [x] Create: `plans/learnings/step-3.1-etl.md`
 - [x] Update `CLAUDE.md` with Python env + run instructions
 - [x] Update `ROADMAP.md` checkboxes
-- [ ] COMMIT
+- [x] COMMIT (`50a634f`)
 
 **Deliverables**: Python env, `scripts/load_results.py`, parquet files in `data/curated/`
 
@@ -532,7 +532,7 @@ Also discovered: `com.tuvium:claude-sdk-capture` (experiment-core) duplicates `i
 - [x] Create: `plans/learnings/step-3.2-variant-comparison.md`
 - [x] Update `CLAUDE.md` with distilled learnings
 - [x] Update `ROADMAP.md` checkboxes
-- [ ] COMMIT
+- [x] COMMIT (`50a634f`)
 
 **Deliverables**: Variant comparison table, radar chart, item cards
 
@@ -541,27 +541,20 @@ Also discovered: `com.tuvium:claude-sdk-capture` (experiment-core) duplicates `i
 ### Step 3.3: Stage 3 Consolidation
 
 **Entry criteria**:
-- [ ] All Stage 3 steps complete (3.0–3.2)
-- [ ] Read: all `plans/learnings/step-3.*` files from this stage
+- [x] All Stage 3 steps complete (3.0–3.2)
+- [x] Read: all `plans/learnings/step-3.*` files from this stage
 
 **Work items**:
-- [ ] COMPACT learnings from Stage 3 into `plans/learnings/LEARNINGS.md`
-  - Data quality issues (efficiency gap, metadata location)
-  - ETL patterns (JSON → parquet → DuckDB)
-  - Key findings: prompt > KB for this dataset, ceiling effects, discriminator items
-  - Conversational data science workflow observations
-- [ ] UPDATE `CLAUDE.md` with distilled learnings
-- [ ] WRITE `analysis/findings-summary.md` — executive summary:
-  - Thesis result: hardened prompt > KB injection on simple Spring guides
-  - Diagnostic framework reading per dimension
-  - Next steps: harder targets, cross-model runs, golden judge re-run
+- [x] COMPACT learnings from Stage 3 into `plans/learnings/LEARNINGS.md`
+- [x] UPDATE `CLAUDE.md` with distilled learnings
+- [x] WRITE `analysis/findings-summary.md` — executive summary
 
 **Exit criteria**:
-- [ ] `LEARNINGS.md` updated with Stage 3 compacted summary
-- [ ] `analysis/findings-summary.md` — one-page findings summary
-- [ ] Create: `plans/learnings/step-3.3-stage3-summary.md`
-- [ ] Update `CLAUDE.md` with distilled learnings
-- [ ] Update `ROADMAP.md` checkboxes
+- [x] `LEARNINGS.md` updated with Stage 3 compacted summary
+- [x] `analysis/findings-summary.md` — one-page findings summary
+- [x] Create: `plans/learnings/step-3.3-stage3-summary.md`
+- [x] Update `CLAUDE.md` with distilled learnings
+- [x] Update `ROADMAP.md` checkboxes
 - [ ] COMMIT
 
 **Deliverables**: Updated `LEARNINGS.md` covering Stages 1-3, findings summary

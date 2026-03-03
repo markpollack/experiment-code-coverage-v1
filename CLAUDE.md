@@ -128,6 +128,24 @@ For full details: `plans/learnings/LEARNINGS.md`
 - `index.md` in knowledgeFiles triggers full recursive tree copy (variant-c); otherwise only listed files are copied (variant-b)
 - `copyKnowledge()` is package-private for direct unit testing (same pattern as `parseJudgment()`)
 
+## Stage 3 Learnings (distilled)
+
+**Full suite results** (2026-03-03, Sonnet, 4 variants × 5 guides):
+- Hardened prompt (variant-a) is the biggest lever: T3=0.80 (+0.18 over control), Eff=0.937, Cost=$4.17
+- KB injection did NOT improve over prompt alone on simple Spring guides
+- Coverage hit ceiling (85-100%) — not discriminating at this difficulty level
+- T3 practice adherence is the meaningful signal for variant comparison
+
+**Data quality**:
+- `index.json` run selection is fragile — use explicit run IDs in ETL (`FULL_SUITE_RUN` dict)
+- Coverage metadata lives in `invocationResult.metadata` (strings), not `item.metadata`
+- Judge verdict extraction needs deduplication (recursive subVerdicts hit same checks)
+
+**Analysis pipeline**:
+- DuckDB + parquet via `scripts/load_results.py` (ETL), `scripts/variant_comparison.py`, `scripts/plot_variant_radar.py`, `scripts/generate_item_cards.py`
+- Setup: `uv venv && uv pip install -r requirements.txt`
+- DuckDB can't scan Python lists — convert to DataFrame first
+
 ## Running the Experiment
 
 **From a plain terminal** (not within a Claude Code session — the agent spawns `claude` CLI which triggers nesting detection):
