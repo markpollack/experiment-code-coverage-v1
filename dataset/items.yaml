@@ -29,3 +29,9 @@ items:
     source: "https://github.com/spring-guides/gs-messaging-stomp-websocket"
     subdirectory: "complete"
     knowledgeRefs: []
+  - id: "spring-petclinic"
+    slug: "spring-petclinic"
+    task: "Improve test coverage to 80% line coverage"
+    source: "https://github.com/spring-projects/spring-petclinic"
+    subdirectory: "."
+    knowledgeRefs: []

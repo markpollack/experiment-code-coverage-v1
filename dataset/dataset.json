@@ -43,6 +43,14 @@
       "bucket": "A",
       "taskType": "coverage-improvement",
       "status": "active"
+    },
+    {
+      "id": "spring-petclinic",
+      "slug": "spring-petclinic",
+      "path": "items/spring-petclinic",
+      "bucket": "B",
+      "taskType": "coverage-improvement",
+      "status": "active"
     }
   ]
 }
