@@ -825,41 +825,199 @@ Also discovered: `com.tuvium:claude-sdk-capture` (experiment-core) duplicates `i
 
 ---
 
-## Stage 6: Graduation + Future Iterations
+## Stage 6: Pet Clinic Sweep — Harder Target Validation
 
-### Step 6.0: Pet Clinic Dataset Expansion
+> **Rationale**: Sweep-001 (getting started guides) showed all improved variants perform similarly on simple projects — the dataset is too easy to discriminate. Pet Clinic is a genuine multi-layer Spring app (controllers, services, repositories, entities, validation, form handling, Testcontainers). This is where knowledge injection and structured execution should matter. We deliberately run with the **existing** KB and prompts first to let the gap signal tell us what to improve.
+
+### Step 6.0: Smoke Test (single variant on Pet Clinic)
 
 **Entry criteria**:
-- [ ] Stage 5 complete
-- [ ] Read: `plans/learnings/LEARNINGS.md` — compacted learnings through Stage 5
-- [ ] Variant-d validated and best variant identified
+- [x] Pet Clinic materialized (`dataset/items/spring-petclinic/before/` compiles clean)
+- [x] 17 golden reference test files saved
+- [x] Docker available (Testcontainers tests require mysql:9.5, postgres images)
+- [ ] Read: `analysis/sweep-001-getting-started-guides.md` — baseline findings
 
-**Context**: Pet Clinic has genuine complexity (multi-layer: controller → service → repository, multiple domain entities, form handling, validation, mixed web + JPA testing). Simple guides hit 85-100% coverage easily — ceiling effects make it hard to discriminate variants. Pet Clinic is where KB advantage should be most visible.
+**Context**: Pet Clinic is ~15 production classes across 4 layers (model, repository, service, controller) with form-based MVC (not REST), JPA entity relationships, validation, and Testcontainers integration tests. The existing prompts were written for simple REST guides — expect gaps.
 
 **Work items**:
-- [ ] UPDATE `materialize.sh` — add per-item source URL support (different GitHub org, no `complete/` subdirectory)
-- [ ] ADD spring-petclinic to `dataset/items.yaml`
-- [ ] MATERIALIZE and verify: `./materialize.sh`
-- [ ] ADD Pet Clinic-specific knowledge to `knowledge/` (if needed)
-- [ ] RUN best variant + variant-d on Pet Clinic
-- [ ] COMPARE results against simple guides — does complexity reveal KB advantage?
+- [ ] VERIFY `./mvnw compile` succeeds with Pet Clinic in dataset (6 items total)
+- [ ] RUN smoke test: `./mvnw compile exec:java -Dexec.args="--variant variant-a --item spring-petclinic"` (from plain terminal, pipe to log)
+- [ ] CHECK: does the agent produce tests that compile?
+- [ ] CHECK: does the agent produce tests that pass?
+- [ ] CHECK: what coverage does it achieve? (expect much lower than guides)
+- [ ] CHECK: any infrastructure issues? (timeouts, Docker, JDK, workspace size)
+- [ ] INSPECT workspace: what tests did it write? What did it miss?
 
 **Exit criteria**:
-- [ ] Pet Clinic dataset item working
-- [ ] Results compared against simple guides
-- [ ] Create: `plans/learnings/step-6.0-pet-clinic.md`
+- [ ] Smoke test complete — know if Pet Clinic runs end-to-end
+- [ ] Infrastructure issues identified and documented
+- [ ] Create: `plans/learnings/step-6.0-petclinic-smoke.md`
 - [ ] Update `ROADMAP.md` checkboxes
 - [ ] COMMIT
 
-**Deliverables**: Pet Clinic as dataset item, comparative results
+**Deliverables**: Smoke test results, infrastructure issue list (if any)
 
 ---
 
-### Step 6.1: Cross-Model Variant
+### Step 6.1: Full Pet Clinic Sweep (5 variants, existing KB/prompts)
 
 **Entry criteria**:
-- [ ] Step 6.0 complete (or can run in parallel with Pet Clinic)
-- [ ] Read: `plans/learnings/step-6.0-pet-clinic.md`
+- [ ] Step 6.0 complete — smoke test passes end-to-end
+- [ ] Read: `plans/learnings/step-6.0-petclinic-smoke.md`
+- [ ] Any infrastructure blockers resolved
+
+**Context**: Run all 5 variants on Pet Clinic with the **existing** prompts and knowledge base — no pre-optimization. The purpose is to generate gap signal: where does the agent fail, and does the DiagnosticAnalyzer classify failures as KB_GAP, AGENT_EXECUTION_GAP, or something else? This tests the hypothesis that KB advantage emerges on complex targets.
+
+**Work items**:
+- [ ] RUN all 5 variants on Pet Clinic only:
+  ```bash
+  ./mvnw compile exec:java -Dexec.args="--variant control --item spring-petclinic" 2>&1 | tee results/petclinic-control.log
+  ./mvnw compile exec:java -Dexec.args="--variant variant-a --item spring-petclinic" 2>&1 | tee results/petclinic-variant-a.log
+  ./mvnw compile exec:java -Dexec.args="--variant variant-b --item spring-petclinic" 2>&1 | tee results/petclinic-variant-b.log
+  ./mvnw compile exec:java -Dexec.args="--variant variant-c --item spring-petclinic" 2>&1 | tee results/petclinic-variant-c.log
+  ./mvnw compile exec:java -Dexec.args="--variant variant-d --item spring-petclinic" 2>&1 | tee results/petclinic-variant-d.log
+  ```
+- [ ] VERIFY: all 5 variants produced result JSONs in session directories
+- [ ] NOTE: each variant runs separately to avoid stale-binary issues; each gets its own session
+
+**Exit criteria**:
+- [ ] All 5 variant results collected for spring-petclinic
+- [ ] Create: `plans/learnings/step-6.1-petclinic-full-run.md`
+- [ ] Update `ROADMAP.md` checkboxes
+- [ ] COMMIT
+
+**Deliverables**: 5 variant results for Pet Clinic
+
+---
+
+### Step 6.2: Pet Clinic Analysis + Cross-Sweep Comparison
+
+**Entry criteria**:
+- [ ] Step 6.1 complete
+- [ ] Read: `plans/learnings/step-6.1-petclinic-full-run.md`
+
+**Context**: Run the DuckDB analysis pipeline on Pet Clinic results, then compare against sweep-001 (getting started guides). Key questions: does variant ranking change? Does KB injection help more on a complex target? Does two-phase justify its cost?
+
+**Work items**:
+- [ ] RUN ETL: `load_results.py --session <petclinic-sessions>`
+- [ ] RUN analysis: `variant_comparison.py`, `plot_variant_radar.py`, `generate_item_cards.py`
+- [ ] COMPARE against sweep-001 findings:
+  - Does coverage spread out? (guides were 85-95% everywhere)
+  - Does T3 adherence spread out? (guides were 0.70-0.76 for improved variants)
+  - Do KB variants (b, c) beat prompt-only (a) on Pet Clinic?
+  - Does variant-d (two-phase) justify its 2x cost on a complex target?
+  - Does golden similarity improve for KB variants? (17 reference tests vs 1)
+- [ ] INSPECT variant-d TEST_PLAN.md — does structured exploration produce better plans on a complex project?
+- [ ] WRITE sweep report: `analysis/sweep-002-petclinic.md`
+
+**Exit criteria**:
+- [ ] Analysis complete with cross-sweep comparison
+- [ ] Sweep report written with findings
+- [ ] Create: `plans/learnings/step-6.2-petclinic-analysis.md`
+- [ ] Update `ROADMAP.md` checkboxes
+- [ ] COMMIT
+
+**Deliverables**: Pet Clinic analysis, cross-sweep comparison, sweep-002 report
+
+---
+
+### Step 6.3: Gap Diagnosis + Improvement Signal
+
+**Entry criteria**:
+- [ ] Step 6.2 complete
+- [ ] Read: `analysis/sweep-002-petclinic.md`
+- [ ] Read: `plans/learnings/step-6.2-petclinic-analysis.md`
+
+**Context**: Use the experiment results to diagnose what needs improvement. The DiagnosticAnalyzer classifies failures into 8 gap categories (KB_GAP, AGENT_EXECUTION_GAP, PLAN_GENERATION_GAP, etc.). Low scores on Pet Clinic should reveal which lever to pull next. We expect KB_GAP to dominate for areas the existing KB doesn't cover (form controller testing, multi-entity relationship setup, service layer testing patterns).
+
+**Work items**:
+- [ ] CLASSIFY low-scoring items by gap category:
+  - KB_GAP → need new knowledge files (form testing patterns, entity relationship test data, service layer testing)
+  - AGENT_EXECUTION_GAP → prompt needs improvement for complex projects
+  - PLAN_GENERATION_GAP → variant-d explore prompt needs Pet Clinic-specific guidance
+  - STOCHASTICITY_GAP → need N>1 runs (re-run same variant to separate signal from noise)
+- [ ] INSPECT agent workspaces: what tests did each variant write? What patterns are missing?
+- [ ] IDENTIFY specific KB gaps from the data:
+  - Form-based controller testing (`.param()`, view assertions, `BindingResult` — current MVC KB is REST-only)
+  - Multi-level entity graph setup (Owner → Pet → Visit)
+  - Service layer testing with mocked repositories
+- [ ] DECIDE next action based on dominant gap category:
+  - If KB_GAP dominant → Step 6.4 (add Pet Clinic-targeted knowledge, re-run)
+  - If AGENT_EXECUTION_GAP dominant → improve prompts for complex projects
+  - If scores are already good → move to cross-model comparison (Step 7.0)
+
+**Exit criteria**:
+- [ ] Gap diagnosis complete with dominant category identified
+- [ ] Specific improvement actions identified
+- [ ] Go/no-go decision for KB expansion
+- [ ] Create: `plans/learnings/step-6.3-gap-diagnosis.md`
+- [ ] Update `ROADMAP.md` checkboxes
+- [ ] COMMIT
+
+**Deliverables**: Gap diagnosis report, improvement action plan
+
+---
+
+### Step 6.4: KB Improvement + Re-Run (conditional)
+
+**Entry criteria**:
+- [ ] Step 6.3 complete with KB_GAP as dominant gap
+- [ ] Read: `plans/learnings/step-6.3-gap-diagnosis.md`
+
+**Context**: Only execute this step if gap diagnosis points to KB_GAP. Add targeted knowledge files for the patterns Pet Clinic needs, then re-run KB variants (b, c, d) to measure improvement. This closes the loop: identify gap → fix → measure.
+
+**Work items**:
+- [ ] ADD knowledge files based on gap diagnosis (candidates):
+  - `spring-testing/mvc-form-testing-patterns.md` — form POST, view assertions, model assertions, redirect, BindingResult
+  - `spring-testing/entity-relationship-test-data.md` — multi-level entity graphs, bidirectional associations, lookup entity pre-population
+  - `spring-testing/service-layer-testing-patterns.md` — service with mocked repositories, multi-repo orchestration
+- [ ] UPDATE `knowledge/spring-testing/index.md` routing table with new entries
+- [ ] RE-RUN variant-b, variant-c, variant-d on Pet Clinic with improved KB
+- [ ] COMPARE against Step 6.1 results — did KB improvement help?
+- [ ] WRITE: `analysis/sweep-003-petclinic-improved-kb.md`
+
+**Exit criteria**:
+- [ ] KB improvement measured — delta documented
+- [ ] Sweep report written
+- [ ] Create: `plans/learnings/step-6.4-kb-improvement.md`
+- [ ] Update `ROADMAP.md` checkboxes
+- [ ] COMMIT
+
+**Deliverables**: Improved KB, re-run results, sweep-003 report
+
+---
+
+### Step 6.5: Stage 6 Consolidation + Archive
+
+**Entry criteria**:
+- [ ] Steps 6.0-6.3 complete (6.4 if executed)
+- [ ] Read: all `plans/learnings/step-6.*` files
+
+**Work items**:
+- [ ] COMPACT learnings from Stage 6 into `plans/learnings/LEARNINGS.md`
+- [ ] UPDATE `CLAUDE.md` with distilled learnings
+- [ ] ARCHIVE Pet Clinic sweep(s) as GitHub release(s)
+- [ ] WRITE updated findings summary
+
+**Exit criteria**:
+- [ ] `LEARNINGS.md` updated with Stage 6 summary
+- [ ] Pet Clinic sweeps archived
+- [ ] Create: `plans/learnings/step-6.5-stage6-summary.md`
+- [ ] Update `ROADMAP.md` checkboxes
+- [ ] COMMIT
+
+**Deliverables**: Updated `LEARNINGS.md`, archived sweeps
+
+---
+
+## Stage 7: Cross-Model Comparison + Graduation
+
+### Step 7.0: Cross-Model Variant
+
+**Entry criteria**:
+- [ ] Stage 6 complete
+- [ ] Read: `plans/learnings/LEARNINGS.md` — compacted learnings through Stage 6
+- [ ] Best variant identified from Pet Clinic sweep
 
 **Context**: The ultimate thesis test — does `Haiku + KB + structured execution` beat `Sonnet/Opus + no KB`? This transforms "knowledge helps" into "knowledge + cheap model beats expensive model."
 
@@ -872,7 +1030,7 @@ Also discovered: `com.tuvium:claude-sdk-capture` (experiment-core) duplicates `i
 **Exit criteria**:
 - [ ] Cross-model comparison data collected
 - [ ] Cost-vs-quality analysis documented
-- [ ] Create: `plans/learnings/step-6.1-cross-model.md`
+- [ ] Create: `plans/learnings/step-7.0-cross-model.md`
 - [ ] Update `ROADMAP.md` checkboxes
 - [ ] COMMIT
 
@@ -880,10 +1038,10 @@ Also discovered: `com.tuvium:claude-sdk-capture` (experiment-core) duplicates `i
 
 ---
 
-### Step 6.2: Graduate Best Variant
+### Step 7.1: Graduate Best Variant
 
 **Entry criteria**:
-- [ ] Steps 6.0-6.1 complete (or at minimum Stage 5 thesis validation done)
+- [ ] Step 7.0 complete (or at minimum Stage 6 thesis validation done)
 
 **Work items**:
 - [ ] EXTRACT best variant → standalone agent project
@@ -892,7 +1050,7 @@ Also discovered: `com.tuvium:claude-sdk-capture` (experiment-core) duplicates `i
 
 **Exit criteria**:
 - [ ] Best variant extracted as standalone project
-- [ ] Create: `plans/learnings/step-6.2-graduation.md`
+- [ ] Create: `plans/learnings/step-7.1-graduation.md`
 - [ ] Update `CLAUDE.md` with distilled learnings
 - [ ] Update `ROADMAP.md` checkboxes
 - [ ] COMMIT
@@ -901,20 +1059,20 @@ Also discovered: `com.tuvium:claude-sdk-capture` (experiment-core) duplicates `i
 
 ---
 
-### Step 6.3: Stage 6 Consolidation
+### Step 7.2: Stage 7 Consolidation
 
 **Entry criteria**:
-- [ ] All Stage 6 steps complete
-- [ ] Read: all `plans/learnings/step-6.*` files
+- [ ] All Stage 7 steps complete
+- [ ] Read: all `plans/learnings/step-7.*` files
 
 **Work items**:
-- [ ] COMPACT learnings from Stage 6 into `plans/learnings/LEARNINGS.md`
+- [ ] COMPACT learnings from Stage 7 into `plans/learnings/LEARNINGS.md`
 - [ ] WRITE final experiment report: `analysis/experiment-report.md`
 
 **Exit criteria**:
 - [ ] `LEARNINGS.md` covers all stages
 - [ ] Final experiment report written
-- [ ] Create: `plans/learnings/step-6.3-stage6-summary.md`
+- [ ] Create: `plans/learnings/step-7.2-stage7-summary.md`
 - [ ] Update `ROADMAP.md` checkboxes
 - [ ] COMMIT
 
