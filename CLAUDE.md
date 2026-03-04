@@ -16,12 +16,14 @@ Agent experiment: improve JUnit test coverage on Spring Boot projects using AI a
 
 **Source of truth**: `plans/ROADMAP.md`
 
-**Current state**: Stage 3 complete. Stage 4 next — implementing two-phase variant-d (structured knowledge consumption via explore-then-act pattern). See `plans/inbox/two-phase-variant-and-next-steps.md` for rationale.
+**Current state**: Stage 4 in progress. Steps 4.0-4.2 complete (two-phase invoker, prompts, config). Step 4.3 next — vibe check.
 
 ## Architecture
 
 ```
-ExperimentApp → ExperimentRunner → CodeCoverageAgentInvoker → CascadedJury → ResultStore
+ExperimentApp → ExperimentRunner → AbstractCoverageAgentInvoker → CascadedJury → ResultStore
+                                   ├── CodeCoverageAgentInvoker (single-phase: AgentClient)
+                                   └── TwoPhaseCodeCoverageAgentInvoker (two-phase: ClaudeSyncClient)
                                                                                  ↓
                                                                        ComparisonEngine
                                                                                  ↓
@@ -147,6 +149,18 @@ For full details: `plans/learnings/LEARNINGS.md`
 - DuckDB + parquet via `scripts/load_results.py` (ETL), `scripts/variant_comparison.py`, `scripts/plot_variant_radar.py`, `scripts/generate_item_cards.py`
 - Setup: `uv venv && uv pip install -r requirements.txt`
 - DuckDB can't scan Python lists — convert to DataFrame first
+
+## Stage 4 Learnings (distilled)
+
+**Architecture**: Extracted `AbstractCoverageAgentInvoker` base class with shared pre/post workflow. Two subclasses:
+- `CodeCoverageAgentInvoker` — single `AgentClient` call (variants control through variant-c)
+- `TwoPhaseCodeCoverageAgentInvoker` — two `ClaudeSyncClient` turns in one session (variant-d)
+
+**ClaudeSyncClient pattern**: `ClaudeClient.sync().workingDirectory(ws).model(m).permissionMode(DANGEROUSLY_SKIP_PERMISSIONS).build()`. Session continuity via `client.connect(explorePrompt)` → `client.query(actPrompt)`. Exhaust captured with `SessionLogParser.parse(client.receiveResponse(), phaseName, promptText)`.
+
+**Dispatch**: `VariantSpec.actPromptFile` (nullable) signals two-phase. `ExperimentApp.createInvoker()` checks `variant.isTwoPhase()`.
+
+**Dependencies**: `claude-code-sdk` 1.0.0-SNAPSHOT added to pom.xml. `claude-code-capture` (already present) provides `SessionLogParser`.
 
 ## Running the Experiment
 

@@ -75,7 +75,7 @@ public class ExperimentApp {
 		logger.info("Running variant: {}", variant.name());
 
 		Jury jury = juryFactory.build(variant);
-		CodeCoverageAgentInvoker invoker = createInvoker(variant);
+		AbstractCoverageAgentInvoker invoker = createInvoker(variant);
 
 		ExperimentConfig config = ExperimentConfig.builder()
 			.experimentName(variantConfig.experimentName() + "/" + variant.name())
@@ -135,17 +135,34 @@ public class ExperimentApp {
 
 	/**
 	 * Create a per-variant invoker with optional knowledge injection.
+	 * Dispatches to two-phase invoker when actPromptFile is set.
 	 */
-	CodeCoverageAgentInvoker createInvoker(VariantSpec variant) {
-		if (variant.knowledgeDir() != null && !variant.knowledgeFiles().isEmpty()) {
-			Path knowledgeSourceDir = projectRoot.resolve(variant.knowledgeDir());
-			return new CodeCoverageAgentInvoker(knowledgeSourceDir, variant.knowledgeFiles());
+	AbstractCoverageAgentInvoker createInvoker(VariantSpec variant) {
+		Path knowledgeSourceDir = variant.knowledgeDir() != null
+				? projectRoot.resolve(variant.knowledgeDir()) : null;
+		List<String> knowledgeFiles = variant.knowledgeFiles();
+		boolean hasKnowledge = knowledgeSourceDir != null && !knowledgeFiles.isEmpty();
+
+		if (variant.isTwoPhase()) {
+			String actPrompt = loadPromptFile(variant.actPromptFile());
+			return new TwoPhaseCodeCoverageAgentInvoker(
+					hasKnowledge ? knowledgeSourceDir : null,
+					hasKnowledge ? knowledgeFiles : null,
+					actPrompt);
+		}
+
+		if (hasKnowledge) {
+			return new CodeCoverageAgentInvoker(knowledgeSourceDir, knowledgeFiles);
 		}
 		return new CodeCoverageAgentInvoker();
 	}
 
 	private String loadPrompt(VariantSpec variant) {
-		Path promptPath = projectRoot.resolve("prompts").resolve(variant.promptFile());
+		return loadPromptFile(variant.promptFile());
+	}
+
+	private String loadPromptFile(String promptFileName) {
+		Path promptPath = projectRoot.resolve("prompts").resolve(promptFileName);
 		try {
 			return Files.readString(promptPath);
 		}
@@ -179,11 +196,12 @@ public class ExperimentApp {
 		for (Map<String, Object> rv : rawVariants) {
 			String name = (String) rv.get("name");
 			String promptFile = (String) rv.get("promptFile");
+			String actPromptFile = (String) rv.get("actPromptFile");
 			String knowledgeDir = (String) rv.get("knowledgeDir");
 			List<String> knowledgeFiles = rv.get("knowledgeFiles") != null
 					? (List<String>) rv.get("knowledgeFiles")
 					: List.of();
-			variants.add(new VariantSpec(name, promptFile, knowledgeDir, knowledgeFiles));
+			variants.add(new VariantSpec(name, promptFile, actPromptFile, knowledgeDir, knowledgeFiles));
 		}
 
 		return new ExperimentVariantConfig(

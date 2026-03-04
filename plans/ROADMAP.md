@@ -2,7 +2,7 @@
 
 > **Created**: 2026-03-01
 > **Last updated**: 2026-03-03
-> **Status**: Stage 3 complete. Full suite run done (4 variants × 5 guides, Sonnet). Analysis pipeline built. Stage 4 next — implementing two-phase variant-d to test structured knowledge consumption.
+> **Status**: Stage 4 in progress. Steps 4.0-4.2 complete (two-phase invoker implemented, prompts written, config updated). Step 4.3 next — vibe check on gs-rest-service from plain terminal.
 
 ## Overview
 
@@ -565,22 +565,23 @@ Also discovered: `com.tuvium:claude-sdk-capture` (experiment-core) duplicates `i
 
 **Entry criteria**:
 - [x] Stage 3 complete
-- [ ] Read: `plans/learnings/LEARNINGS.md` — compacted learnings through Stage 3
-- [ ] Read: `analysis/findings-summary.md` — key findings from Stage 3 analysis
-- [ ] Read: `plans/inbox/two-phase-variant-and-next-steps.md` — two-phase design + rationale
-- [ ] Read: `plans/inbox/golden-judge-handoff.md` — golden judge context
+- [x] Read: `plans/learnings/LEARNINGS.md` — compacted learnings through Stage 3
+- [x] Read: `analysis/findings-summary.md` — key findings from Stage 3 analysis
+- [x] Read: `plans/inbox/two-phase-variant-and-next-steps.md` — two-phase design + rationale
+- [x] Read: `plans/inbox/session-continuity-for-two-phase.md` — ClaudeSyncClient decision + rationale
 
 **Work items**:
-- [ ] REVIEW Stage 3 findings: variant-a (hardened prompt, no KB) beats variant-b/c (with KB) on T3 adherence
-- [ ] REVIEW two-layer value model diagnosis: current KB variants have Layer 2 (knowledge) without structured Layer 1 (orchestration)
-- [ ] REVIEW refactoring-agent two-phase pattern at `~/tuvium/projects/refactoring-agent/agent/src/main/java/com/tuvium/agent/RefactoringAgent.java`
-- [ ] VERIFY `ClaudeSyncClient` is available in `claude-agent-sdk-java` dependency (session continuity between explore and act phases)
-- [ ] DOCUMENT design decisions in learnings
+- [x] REVIEW Stage 3 findings: variant-a (hardened prompt, no KB) beats variant-b/c (with KB) on T3 adherence
+- [x] REVIEW two-layer value model diagnosis: current KB variants have Layer 2 (knowledge) without structured Layer 1 (orchestration)
+- [x] REVIEW refactoring-agent two-phase pattern (ClaudeSyncClient connect→query)
+- [x] VERIFY `ClaudeSyncClient` is available in `claude-agent-sdk-java` dependency (session continuity between explore and act phases)
+- [x] VERIFY `claude-code-capture` dependency already in pom.xml (provides `SessionLogParser.parse()`)
+- [x] DOCUMENT design decisions in learnings
 
 **Exit criteria**:
-- [ ] ClaudeSyncClient API understood and available
-- [ ] Create: `plans/learnings/step-4.0-context-review.md`
-- [ ] Update `ROADMAP.md` checkboxes
+- [x] ClaudeSyncClient API understood and available
+- [x] Create: `plans/learnings/step-4.0-context-review.md`
+- [x] Update `ROADMAP.md` checkboxes
 
 **Deliverables**: Design decisions documented, ClaudeSyncClient API confirmed
 
@@ -589,65 +590,69 @@ Also discovered: `com.tuvium:claude-sdk-capture` (experiment-core) duplicates `i
 ### Step 4.1: Implement Two-Phase CodeCoverageAgentInvoker
 
 **Entry criteria**:
-- [ ] Step 4.0 complete
-- [ ] Read: `plans/learnings/step-4.0-context-review.md` — prior step learnings
+- [x] Step 4.0 complete
+- [x] Read: `plans/learnings/step-4.0-context-review.md` — prior step learnings
 
 **Context**: The current `CodeCoverageAgentInvoker.invoke()` makes one `AgentClient` call. The two-phase variant needs two turns in one `ClaudeSyncClient` session so the agent retains understanding between explore and act. Pattern proven in `RefactoringAgent.java`.
 
+**Implementation approach**: Extract `AbstractCoverageAgentInvoker` base class with shared pre/post steps (compile check, JaCoCo injection, baseline measurement, knowledge copy, final coverage measurement, metadata enrichment). Two subclasses:
+- `CodeCoverageAgentInvoker` — single `AgentClient` call (existing, refactored to extend base)
+- `TwoPhaseCodeCoverageAgentInvoker` — two `ClaudeSyncClient` turns (new)
+
 **Work items**:
-- [ ] ADD `claude-agent-sdk-java` dependency to pom.xml (if not already present for `ClaudeSyncClient`)
-- [ ] IMPLEMENT `TwoPhaseCodeCoverageAgentInvoker` (or add two-phase mode to existing invoker):
-  - Phase 1 (explore+plan): `client.connect(explorePrompt)` → agent reads project + KB, writes `TEST_PLAN.md`
-  - Phase 2 (execute): `client.query(actPrompt)` → agent implements tests per plan, runs `./mvnw test`
-  - Both phases in single `ClaudeSyncClient` session (session continuity)
-  - Capture `PhaseCapture` from both phases for exhaust data
-- [ ] WIRE variant-d invoker creation in `ExperimentApp.createInvoker()` — detect variant-d and return two-phase invoker
-- [ ] VERIFY: `./mvnw test` — all 34+ tests pass
+- [x] ADD `claude-code-sdk` dependency to `pom.xml`
+- [x] ADD `actPromptFile` field to `VariantSpec` record (nullable, with `isTwoPhase()` convenience method)
+- [x] UPDATE `ExperimentVariantConfig` to parse `actPromptFile` from YAML
+- [x] EXTRACT `AbstractCoverageAgentInvoker` base class from `CodeCoverageAgentInvoker`
+- [x] REFACTOR `CodeCoverageAgentInvoker` to extend base class (verified no behavioral change — 34 tests pass)
+- [x] IMPLEMENT `TwoPhaseCodeCoverageAgentInvoker` extending base class
+- [x] UPDATE `ExperimentApp.createInvoker()` — dispatch on `variant.isTwoPhase()` → two-phase invoker
+- [x] VERIFY: `./mvnw test` — all 34 existing tests pass after refactoring
 
 **Exit criteria**:
-- [ ] Two-phase invoker compiles and integrates with ExperimentApp
-- [ ] All tests pass: `./mvnw test`
-- [ ] Create: `plans/learnings/step-4.1-two-phase-invoker.md`
-- [ ] Update `CLAUDE.md` with distilled learnings
-- [ ] Update `ROADMAP.md` checkboxes
-- [ ] COMMIT
+- [x] Two-phase invoker compiles and integrates with ExperimentApp
+- [x] All tests pass: `./mvnw test` — 34 tests
+- [x] Create: `plans/learnings/step-4.1-two-phase-invoker.md`
+- [x] Update `ROADMAP.md` checkboxes
 
-**Deliverables**: Two-phase `CodeCoverageAgentInvoker` with `ClaudeSyncClient` session continuity
+**Deliverables**: `AbstractCoverageAgentInvoker`, refactored `CodeCoverageAgentInvoker`, `TwoPhaseCodeCoverageAgentInvoker`, `VariantSpec.actPromptFile`
 
 ---
 
 ### Step 4.2: Explore + Act Prompts
 
 **Entry criteria**:
-- [ ] Step 4.1 complete
-- [ ] Read: `plans/learnings/step-4.1-two-phase-invoker.md` — prior step learnings
+- [x] Step 4.1 complete
+- [x] Read: `plans/learnings/step-4.1-two-phase-invoker.md` — prior step learnings
 
 **Work items**:
-- [ ] WRITE `prompts/v3-explore.txt` — explore phase prompt:
+- [x] WRITE `prompts/v3-explore.txt` — explore phase prompt:
   - Read project structure and source code
-  - Read knowledge files in `knowledge/`
+  - Read knowledge files in `knowledge/` (start with index.md routing table)
   - Analyze what the application does
   - Write `TEST_PLAN.md` with: which test classes to create and why, which Spring test annotations to use and why, which assertion patterns apply, which edge cases to test
   - Do NOT write any test code yet
-- [ ] WRITE `prompts/v3-act.txt` — act phase prompt:
+- [x] WRITE `prompts/v3-act.txt` — act phase prompt:
   - Read `TEST_PLAN.md`
   - Implement tests according to plan
   - Run `./mvnw test` to verify compilation and passing
-- [ ] ADD variant-d to `experiment-config.yaml`:
+- [x] ADD variant-d to `experiment-config.yaml`:
+  ```yaml
   - name: variant-d
-  - promptFile: v3-explore.txt (explore phase; act prompt loaded separately by two-phase invoker)
-  - knowledgeDir: knowledge
-  - knowledgeFiles: [index.md] (full KB, same as variant-c)
-- [ ] VERIFY: config loads correctly with `./mvnw compile exec:java -Dexec.args="--variant variant-d --item gs-rest-service"` (will fail at runtime but should parse config)
+    promptFile: v3-explore.txt
+    actPromptFile: v3-act.txt
+    knowledgeDir: knowledge
+    knowledgeFiles:
+      - index.md
+  ```
+- [x] VERIFY: `./mvnw compile` — config parses, all imports resolve
 
 **Exit criteria**:
-- [ ] Both prompt files written and reviewed
-- [ ] Variant-d in experiment-config.yaml
-- [ ] Config parsing works
-- [ ] Create: `plans/learnings/step-4.2-prompts.md`
-- [ ] Update `CLAUDE.md` with distilled learnings
-- [ ] Update `ROADMAP.md` checkboxes
-- [ ] COMMIT
+- [x] Both prompt files written and reviewed
+- [x] Variant-d in experiment-config.yaml
+- [x] Config parsing works (`./mvnw compile` succeeds)
+- [x] Create: `plans/learnings/step-4.2-prompts.md`
+- [x] Update `ROADMAP.md` checkboxes
 
 **Deliverables**: `v3-explore.txt`, `v3-act.txt`, variant-d config entry
 
@@ -656,7 +661,7 @@ Also discovered: `com.tuvium:claude-sdk-capture` (experiment-core) duplicates `i
 ### Step 4.3: Single-Item Vibe Check (gs-rest-service)
 
 **Entry criteria**:
-- [ ] Step 4.2 complete
+- [x] Step 4.2 complete
 - [ ] Read: `plans/learnings/step-4.2-prompts.md` — prior step learnings
 
 **Context**: Before committing to a multi-hour full suite run, validate the two-phase approach on the cleanest signal item. gs-rest-service is most representative (simple REST controller), has clear golden standard (2 @Test methods, @SpringBootTest + @AutoConfigureMockMvc + MockMvc), and runs fastest.

@@ -22,3 +22,9 @@ variants:
     knowledgeDir: knowledge
     knowledgeFiles:
       - index.md
+  - name: variant-d
+    promptFile: v3-explore.txt
+    actPromptFile: v3-act.txt
+    knowledgeDir: knowledge
+    knowledgeFiles:
+      - index.md
