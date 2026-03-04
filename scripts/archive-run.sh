@@ -1,179 +1,245 @@
 #!/usr/bin/env bash
 #
-# Archive an experiment run as dated tarballs on a GitHub release.
+# Archive an experiment sweep as dated tarballs on a GitHub release.
 #
 # Usage:
-#   ./scripts/archive-run.sh <run-name> <date> [--draft]
+#   ./scripts/archive-run.sh <sweep-name> [--session <name>]... [--draft]
 #
 # Example:
-#   ./scripts/archive-run.sh full-suite-v1 2026-03-03
-#   ./scripts/archive-run.sh full-suite-v1 2026-03-03 --draft
+#   ./scripts/archive-run.sh sweep-001-gs-guides \
+#       --session 20260304-045624 --session 20260304-064326 --session 20260304-112636
+#
+#   ./scripts/archive-run.sh sweep-001-gs-guides --draft   # archives all sessions
 #
 # Creates:
-#   code-coverage-results-<date>.tar.gz   — result JSON + workspaces (~22 MB compressed)
-#   code-coverage-analysis-<date>.tar.gz  — analysis artifacts (tables, figures, cards, summary)
-#   code-coverage-run-log-<date>.tar.gz   — execution log
+#   {sweep}-results.tar.gz    — session result JSONs (variant results + session metadata)
+#   {sweep}-analysis.tar.gz   — analysis artifacts (tables, figures, cards, sweep report)
+#   {sweep}-logs.tar.gz       — execution logs
 #
-# Publishes as GitHub release tagged <run-name>.
+# Publishes as GitHub release tagged {sweep-name}.
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 RESULTS_DIR="$PROJECT_ROOT/results/code-coverage-experiment"
-LOG_FILE="$PROJECT_ROOT/results/full-suite-run.log"
+SESSIONS_DIR="$RESULTS_DIR/sessions"
 STAGING_DIR="$PROJECT_ROOT/.archive-staging"
 
-if [[ $# -lt 2 ]]; then
-    echo "Usage: $0 <run-name> <date> [--draft]"
-    echo "Example: $0 full-suite-v1 2026-03-03"
+# Parse arguments
+SWEEP_NAME=""
+SESSIONS=()
+DRAFT_FLAG=""
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --session)
+            SESSIONS+=("$2")
+            shift 2
+            ;;
+        --draft)
+            DRAFT_FLAG="--draft"
+            shift
+            ;;
+        -*)
+            echo "Unknown flag: $1" >&2
+            exit 1
+            ;;
+        *)
+            if [[ -z "$SWEEP_NAME" ]]; then
+                SWEEP_NAME="$1"
+            else
+                echo "Unexpected argument: $1" >&2
+                exit 1
+            fi
+            shift
+            ;;
+    esac
+done
+
+if [[ -z "$SWEEP_NAME" ]]; then
+    echo "Usage: $0 <sweep-name> [--session <name>]... [--draft]"
+    echo ""
+    echo "Examples:"
+    echo "  $0 sweep-001-gs-guides --session 20260304-045624 --session 20260304-064326"
+    echo "  $0 sweep-001-gs-guides   # archives all sessions"
+    echo ""
+    echo "Available sessions:"
+    ls "$SESSIONS_DIR" 2>/dev/null | sort
     exit 1
 fi
 
-RUN_NAME="$1"
-RUN_DATE="$2"
-DRAFT_FLAG=""
-if [[ "${3:-}" == "--draft" ]]; then
-    DRAFT_FLAG="--draft"
+# If no sessions specified, include all
+if [[ ${#SESSIONS[@]} -eq 0 ]]; then
+    echo "No --session flags provided, including all sessions"
+    for d in "$SESSIONS_DIR"/*/; do
+        SESSIONS+=("$(basename "$d")")
+    done
 fi
 
-RESULTS_TARBALL="code-coverage-results-${RUN_DATE}.tar.gz"
-ANALYSIS_TARBALL="code-coverage-analysis-${RUN_DATE}.tar.gz"
-LOG_TARBALL="code-coverage-run-log-${RUN_DATE}.tar.gz"
+RESULTS_TARBALL="${SWEEP_NAME}-results.tar.gz"
+ANALYSIS_TARBALL="${SWEEP_NAME}-analysis.tar.gz"
+LOGS_TARBALL="${SWEEP_NAME}-logs.tar.gz"
 
-echo "=== Archiving run: $RUN_NAME ($RUN_DATE) ==="
+echo "=== Archiving sweep: $SWEEP_NAME ==="
+echo "Sessions: ${SESSIONS[*]}"
+echo ""
 
 # Clean staging
 rm -rf "$STAGING_DIR"
-mkdir -p "$STAGING_DIR"
+mkdir -p "$STAGING_DIR/results" "$STAGING_DIR/logs"
 
-# Package results
+# Package session results
 echo "Packaging results..."
-if [[ -d "$RESULTS_DIR" ]]; then
-    tar czf "$STAGING_DIR/$RESULTS_TARBALL" -C "$RESULTS_DIR" .
-    echo "  $RESULTS_TARBALL ($(du -h "$STAGING_DIR/$RESULTS_TARBALL" | cut -f1))"
-else
-    echo "  ERROR: $RESULTS_DIR not found"
-    exit 1
-fi
+VARIANT_COUNT=0
+for session in "${SESSIONS[@]}"; do
+    session_dir="$SESSIONS_DIR/$session"
+    if [[ ! -d "$session_dir" ]]; then
+        echo "  WARNING: Session $session not found, skipping"
+        continue
+    fi
+    # Copy session directory (JSONs + session metadata, skip workspaces to keep size down)
+    mkdir -p "$STAGING_DIR/results/$session"
+    for f in "$session_dir"/*.json; do
+        [[ -f "$f" ]] && cp "$f" "$STAGING_DIR/results/$session/"
+    done
+    # Count variants (exclude session.json and sessions-index.json)
+    for f in "$session_dir"/*.json; do
+        name="$(basename "$f")"
+        [[ "$name" == "session.json" || "$name" == "sessions-index.json" ]] && continue
+        VARIANT_COUNT=$((VARIANT_COUNT + 1))
+    done
+    echo "  $session: $(ls "$STAGING_DIR/results/$session"/*.json 2>/dev/null | wc -l) files"
+done
+tar czf "$STAGING_DIR/$RESULTS_TARBALL" -C "$STAGING_DIR/results" .
+RESULTS_SIZE="$(du -h "$STAGING_DIR/$RESULTS_TARBALL" | cut -f1)"
+echo "  $RESULTS_TARBALL ($RESULTS_SIZE)"
+echo ""
 
 # Package analysis
 echo "Packaging analysis..."
 ANALYSIS_DIR="$PROJECT_ROOT/analysis"
 if [[ -d "$ANALYSIS_DIR" ]]; then
     tar czf "$STAGING_DIR/$ANALYSIS_TARBALL" -C "$PROJECT_ROOT" analysis/
-    echo "  $ANALYSIS_TARBALL ($(du -h "$STAGING_DIR/$ANALYSIS_TARBALL" | cut -f1))"
+    ANALYSIS_SIZE="$(du -h "$STAGING_DIR/$ANALYSIS_TARBALL" | cut -f1)"
+    echo "  $ANALYSIS_TARBALL ($ANALYSIS_SIZE)"
 else
     echo "  WARNING: $ANALYSIS_DIR not found, skipping"
 fi
+echo ""
 
-# Package log
-echo "Packaging run log..."
-if [[ -f "$LOG_FILE" ]]; then
-    tar czf "$STAGING_DIR/$LOG_TARBALL" -C "$(dirname "$LOG_FILE")" "$(basename "$LOG_FILE")"
-    echo "  $LOG_TARBALL ($(du -h "$STAGING_DIR/$LOG_TARBALL" | cut -f1))"
+# Package logs
+echo "Packaging logs..."
+LOG_COUNT=0
+for log in "$PROJECT_ROOT"/results/*.log; do
+    if [[ -f "$log" ]]; then
+        cp "$log" "$STAGING_DIR/logs/"
+        LOG_COUNT=$((LOG_COUNT + 1))
+    fi
+done
+if [[ $LOG_COUNT -gt 0 ]]; then
+    tar czf "$STAGING_DIR/$LOGS_TARBALL" -C "$STAGING_DIR/logs" .
+    LOGS_SIZE="$(du -h "$STAGING_DIR/$LOGS_TARBALL" | cut -f1)"
+    echo "  $LOGS_TARBALL ($LOGS_SIZE, $LOG_COUNT log files)"
 else
-    echo "  WARNING: $LOG_FILE not found, skipping"
+    echo "  No log files found, skipping"
 fi
+echo ""
 
-# Generate release notes
+# Generate release notes from sweep report if available
 echo "Generating release notes..."
 NOTES_FILE="$STAGING_DIR/release-notes.md"
-cat > "$NOTES_FILE" << 'HEADER'
-## Code Coverage Experiment — Full Suite Run
-HEADER
+SWEEP_REPORT="$ANALYSIS_DIR/sweep-001-getting-started-guides.md"
 
-echo "" >> "$NOTES_FILE"
-echo "**Date**: ${RUN_DATE}" >> "$NOTES_FILE"
-echo "**Model**: claude-sonnet-4-6" >> "$NOTES_FILE"
-echo "**Dataset**: 5 Spring Getting Started guides (0% baseline)" >> "$NOTES_FILE"
-echo "**Variants**: control, variant-a, variant-b, variant-c" >> "$NOTES_FILE"
-echo "" >> "$NOTES_FILE"
+cat > "$NOTES_FILE" << EOF
+## Code Coverage Experiment — $SWEEP_NAME
 
-cat >> "$NOTES_FILE" << 'BODY'
-### Results Summary
+**Sessions**: ${SESSIONS[*]}
+**Variant results**: $VARIANT_COUNT
 
-| Variant | Pass Rate | Avg T3 | Avg Eff | Total Cost |
-|---------|-----------|--------|---------|------------|
-| Control | 100% | 0.62 | 0.878 | $4.57 |
-| Variant-A (hardened prompt) | 100% | 0.80 | 0.937 | $4.17 |
-| Variant-B (targeted KB) | 100% | 0.697 | 0.837 | $4.98 |
-| Variant-C (deep KB) | 100% | 0.757 | 0.823 | $4.55 |
+EOF
 
-**Key finding**: Hardened prompt (variant-a) beats KB injection on simple Spring guides.
+# Pull summary table from sweep report if it exists
+if [[ -f "$SWEEP_REPORT" ]]; then
+    echo "### Summary Results" >> "$NOTES_FILE"
+    echo "" >> "$NOTES_FILE"
+    # Extract the summary table (between "## Summary Results" and the next ##)
+    sed -n '/^## Summary Results/,/^## /{/^## Summary Results/d;/^## /d;p}' "$SWEEP_REPORT" >> "$NOTES_FILE" 2>/dev/null || true
+    echo "" >> "$NOTES_FILE"
+    echo "### High-Confidence Findings" >> "$NOTES_FILE"
+    echo "" >> "$NOTES_FILE"
+    sed -n '/^## High-Confidence Findings/,/^## /{/^## High-Confidence Findings/d;/^## /d;p}' "$SWEEP_REPORT" >> "$NOTES_FILE" 2>/dev/null || true
+fi
 
-### Run IDs
+# Also include the variant-comparison table
+COMPARISON_TABLE="$ANALYSIS_DIR/tables/variant-comparison.md"
+if [[ -f "$COMPARISON_TABLE" ]]; then
+    echo "" >> "$NOTES_FILE"
+    echo "### Variant Comparison" >> "$NOTES_FILE"
+    echo "" >> "$NOTES_FILE"
+    # Extract just the summary table
+    sed -n '/^## Summary/,/^## /{/^## Summary/d;/^## /d;p}' "$COMPARISON_TABLE" >> "$NOTES_FILE"
+fi
 
-| Variant | Run ID |
-|---------|--------|
-| control | `05aa20bb-5e04-42e7-acf6-e74276dcb1c2` |
-| variant-a | `4f25dfd2-ba55-4add-96f8-2f9030f91a2f` |
-| variant-b | `9c2d49af-8fc3-407c-aaf6-9b0b17c3b4b3` |
-| variant-c | `d7926aaf-a2f7-4ab0-9c96-1fdd66ac5dd6` |
+cat >> "$NOTES_FILE" << EOF
 
 ### Archives
 
 | Archive | Contents |
 |---------|----------|
-BODY
-
-echo "| \`${RESULTS_TARBALL}\` | Result JSON + workspaces (4 variants × 5 guides) |" >> "$NOTES_FILE"
-echo "| \`${ANALYSIS_TARBALL}\` | Analysis artifacts (tables, figures, cards, findings summary) |" >> "$NOTES_FILE"
-echo "| \`${LOG_TARBALL}\` | Execution log (1h39m run transcript) |" >> "$NOTES_FILE"
-
-cat >> "$NOTES_FILE" << 'EXTRACT'
+| \`$RESULTS_TARBALL\` | Session result JSONs ($VARIANT_COUNT variant results) |
+| \`$ANALYSIS_TARBALL\` | Analysis artifacts (tables, figures, cards, sweep report) |
+| \`$LOGS_TARBALL\` | Execution logs |
 
 ### Extraction
 
-```bash
-# Extract results to project directory
-mkdir -p results/code-coverage-experiment
-tar xzf code-coverage-results-*.tar.gz -C results/code-coverage-experiment/
+\`\`\`bash
+# Extract session results
+mkdir -p results/code-coverage-experiment/sessions
+tar xzf ${RESULTS_TARBALL} -C results/code-coverage-experiment/sessions/
 
 # Extract analysis (frozen-in-time snapshot)
-tar xzf code-coverage-analysis-*.tar.gz -C .
+tar xzf ${ANALYSIS_TARBALL} -C .
 
-# Extract run log
-tar xzf code-coverage-run-log-*.tar.gz -C results/
-```
+# Extract logs
+mkdir -p results
+tar xzf ${LOGS_TARBALL} -C results/
+\`\`\`
 
-To regenerate analysis from extracted results (or after ETL changes):
+To regenerate analysis from extracted results:
 
-```bash
+\`\`\`bash
 uv venv && uv pip install -r requirements.txt
-.venv/bin/python scripts/load_results.py
+.venv/bin/python scripts/load_results.py --session ${SESSIONS[*]/#/--session }
 .venv/bin/python scripts/variant_comparison.py
 .venv/bin/python scripts/plot_variant_radar.py
 .venv/bin/python scripts/generate_item_cards.py
-```
-EXTRACT
+\`\`\`
+
+Full sweep report: \`analysis/sweep-001-getting-started-guides.md\`
+EOF
 
 # List assets to upload
 ASSETS=("$STAGING_DIR/$RESULTS_TARBALL")
-if [[ -f "$STAGING_DIR/$ANALYSIS_TARBALL" ]]; then
-    ASSETS+=("$STAGING_DIR/$ANALYSIS_TARBALL")
-fi
-if [[ -f "$STAGING_DIR/$LOG_TARBALL" ]]; then
-    ASSETS+=("$STAGING_DIR/$LOG_TARBALL")
-fi
+[[ -f "$STAGING_DIR/$ANALYSIS_TARBALL" ]] && ASSETS+=("$STAGING_DIR/$ANALYSIS_TARBALL")
+[[ -f "$STAGING_DIR/$LOGS_TARBALL" ]] && ASSETS+=("$STAGING_DIR/$LOGS_TARBALL")
 
-echo ""
 echo "Ready to create release:"
-echo "  Tag: $RUN_NAME"
-echo "  Assets: ${ASSETS[*]}"
+echo "  Tag: $SWEEP_NAME"
+echo "  Assets: ${#ASSETS[@]} files"
 echo "  Draft: ${DRAFT_FLAG:-no}"
 echo ""
 
 # Create release
-gh release create "$RUN_NAME" \
-    --title "Full Suite Run: ${RUN_DATE} (4 variants × 5 guides)" \
+gh release create "$SWEEP_NAME" \
+    --title "$SWEEP_NAME" \
     --notes-file "$NOTES_FILE" \
     $DRAFT_FLAG \
     "${ASSETS[@]}"
 
 echo ""
-echo "=== Release created: $RUN_NAME ==="
-echo "View: gh release view $RUN_NAME"
+echo "=== Release created: $SWEEP_NAME ==="
+echo "View: gh release view $SWEEP_NAME"
 
 # Clean up staging
 rm -rf "$STAGING_DIR"
