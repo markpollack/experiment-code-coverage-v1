@@ -47,46 +47,62 @@ Tools included: BashTool, FileSystemTools, GlobTool, GrepTool, SubmitTool, TodoW
 
 Don't wrap Loopy in AgentClient. Don't write a loopy-agent-sdk. Construct MiniAgent directly in a new invoker class. The experiment-driver already has the template-method pattern for this.
 
-### New Dependencies (pom.xml)
+### Approach: Depend on Loopy Directly (Programmatic API)
+
+We own both codebases. No vendoring, no subprocess, no AgentClient wrapper. Add Loopy as a Maven dependency and call it programmatically.
+
+**Step 1 — Add programmatic API to Loopy** (`LoopyAgent.java`, new public class):
+
+```java
+// io.github.markpollack.loopy.LoopyAgent — the programmatic entry point
+// Thin stable API over Loopy internals. Experiment-driver consumes this.
+public class LoopyAgent {
+
+    public static Builder builder() { ... }
+
+    /** Run a task. With session memory, context is preserved across calls. */
+    public LoopyResult run(String task) { ... }
+
+    /** Clear session memory, start fresh. */
+    public void clearSession() { ... }
+
+    public record LoopyResult(
+        String status,          // COMPLETED, TURN_LIMIT_REACHED, TIMEOUT, etc.
+        String output,
+        int turnsCompleted,
+        int toolCallsExecuted,
+        long totalTokens,
+        double estimatedCost
+    ) {}
+
+    public static class Builder {
+        public Builder model(String modelId) { ... }      // "claude-haiku-4-5-20251001"
+        public Builder workingDirectory(Path dir) { ... }
+        public Builder systemPrompt(String prompt) { ... }
+        public Builder maxTurns(int turns) { ... }
+        public Builder sessionMemory(boolean enabled) { ... }  // default true
+        public LoopyAgent build() { ... }
+    }
+}
+```
+
+Internally creates `AnthropicChatModel` from model ID + `ANTHROPIC_API_KEY` env var, wires MiniAgent with tools, session memory, etc. All Loopy internals stay internal. The experiment only sees `LoopyAgent`.
+
+When Wiggum memory lands in Loopy, `LoopyAgent` gets it automatically — no experiment-driver changes needed.
+
+**Step 2 — Add Loopy dependency to experiment-driver** (pom.xml):
 
 ```xml
-<!-- Spring AI Anthropic (for Haiku ChatModel) -->
 <dependency>
-    <groupId>org.springframework.ai</groupId>
-    <artifactId>spring-ai-anthropic</artifactId>
-</dependency>
-
-<!-- Spring AI Agent Utils (tools: BashTool, FileSystem, Glob, Grep) -->
-<dependency>
-    <groupId>org.springaicommunity</groupId>
-    <artifactId>spring-ai-agent-utils</artifactId>
-    <version>0.5.0-SNAPSHOT</version>
+    <groupId>io.github.markpollack</groupId>
+    <artifactId>loopy</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
 </dependency>
 ```
 
-Spring AI BOM should already be in the dependency management from spring-ai-agent-client. If not, add it.
+Requires `cd ~/projects/loopy && ./mvnw install` first. Pulls in Spring AI transitively.
 
-### Vendoring MiniAgent Classes
-
-Two options:
-
-**Option A — Copy ~5 essential classes** (recommended for speed):
-- `MiniAgent.java` — the agent loop wrapper
-- `MiniAgentConfig.java` — configuration record
-- `MiniAgentResult` — already a record inside MiniAgent
-- `BashTool.java` — shell execution (from Loopy's vendored copy)
-- `AgentLoopAdvisor.java` + supporting loop classes — the Spring AI advisor that drives the tool call loop
-
-Copy into `io.github.markpollack.experiment.coverage.agent` package. Strip out TUI/interactive/callback code — keep only headless `run()` path.
-
-**Option B — Depend on Loopy as Maven artifact**:
-- Requires `mvn install` of Loopy first
-- Pulls in tui4j and other TUI deps (unnecessary)
-- More coupling than needed
-
-Option A is cleaner. The essential agent loop is ~200 lines of real code.
-
-### LoopyCoverageAgentInvoker.java (~80 lines)
+**Step 3 — Write LoopyCoverageAgentInvoker** (~60 lines):
 
 ```java
 public class LoopyCoverageAgentInvoker extends AbstractCoverageAgentInvoker {
@@ -95,57 +111,33 @@ public class LoopyCoverageAgentInvoker extends AbstractCoverageAgentInvoker {
     protected AgentResult invokeAgent(InvocationContext context, CoverageMetrics baseline)
             throws Exception {
 
-        Path workspace = context.workspace();
-        String model = context.model();  // "claude-haiku-4-5-20251001" or "claude-sonnet-4-6"
-
-        // Create Spring AI ChatModel for Anthropic
-        AnthropicApi api = AnthropicApi.builder()
-            .apiKey(System.getenv("ANTHROPIC_API_KEY"))
-            .build();
-        AnthropicChatModel chatModel = AnthropicChatModel.builder()
-            .anthropicApi(api)
-            .defaultOptions(AnthropicChatOptions.builder()
-                .model(model)
-                .maxTokens(8192)
-                .build())
-            .build();
-
-        // Build MiniAgent with session memory (for two-phase support)
-        MiniAgent agent = MiniAgent.builder()
-            .model(chatModel)
-            .config(MiniAgentConfig.builder()
-                .workingDirectory(workspace)
-                .systemPrompt(context.systemPrompt())
-                .maxTurns(80)
-                .commandTimeout(Duration.ofSeconds(120))
-                .build())
-            .sessionMemory()  // enables plan+act in same session
+        LoopyAgent agent = LoopyAgent.builder()
+            .model(context.model())
+            .workingDirectory(context.workspace())
+            .systemPrompt(context.systemPrompt())
+            .maxTurns(80)
+            .sessionMemory(true)
             .build();
 
         if (context.variant().isTwoPhase()) {
-            // Two-phase: explore then act, session memory preserves context
+            // Plan + act — session memory preserves context between calls
             String explorePrompt = buildPrompt(context.prompt(), baseline);
-            MiniAgentResult exploreResult = agent.run(explorePrompt);
-
+            LoopyResult exploreResult = agent.run(explorePrompt);
             PhaseCapture explore = toPhaseCapture(exploreResult, "explore", explorePrompt);
 
-            String actPrompt = context.actPrompt();
-            MiniAgentResult actResult = agent.run(actPrompt);
-
-            PhaseCapture act = toPhaseCapture(actResult, "act", actPrompt);
+            LoopyResult actResult = agent.run(context.actPrompt());
+            PhaseCapture act = toPhaseCapture(actResult, "act", context.actPrompt());
 
             return new AgentResult(List.of(explore, act), UUID.randomUUID().toString());
         } else {
-            // Single-phase
             String prompt = buildPrompt(context.prompt(), baseline);
-            MiniAgentResult result = agent.run(prompt);
-
+            LoopyResult result = agent.run(prompt);
             PhaseCapture capture = toPhaseCapture(result, "single", prompt);
             return new AgentResult(List.of(capture), UUID.randomUUID().toString());
         }
     }
 
-    private PhaseCapture toPhaseCapture(MiniAgentResult result, String phase, String prompt) {
+    private PhaseCapture toPhaseCapture(LoopyResult result, String phase, String prompt) {
         return PhaseCapture.builder()
             .phase(phase)
             .prompt(prompt)
@@ -236,9 +228,9 @@ For the ablation comparison, the aggregate metrics are sufficient.
 
 ## Sequencing
 
-1. **Copy MiniAgent essentials** (~5 classes) into experiment-driver, headless only
-2. **Add Spring AI Anthropic + agent-utils deps** to pom.xml
-3. **Write LoopyCoverageAgentInvoker** (~80 lines)
+1. **Add `LoopyAgent` class to Loopy** — stable programmatic API (~100 lines), `./mvnw install`
+2. **Add Loopy dependency** to experiment-driver pom.xml
+3. **Write LoopyCoverageAgentInvoker** (~60 lines)
 4. **Add loopy-haiku-control variant** to experiment-config.yaml
 5. **Smoke test**: `--variant loopy-haiku-control --item gs-rest-service`
 6. **Add loopy-haiku-kb and loopy-sonnet-kb variants**
@@ -249,17 +241,15 @@ Steps 1-5 should take one session. The key risk is whether Haiku has enough capa
 
 ---
 
-## Why Not AgentClient?
+## Why This Approach (Not AgentClient, Not Vendoring)
 
-AgentClient wraps external CLI agents via subprocess. Loopy's value here is that it runs **in-process** — same JVM as the experiment-driver. Benefits:
+**Not AgentClient**: AgentClient wraps external CLI agents via subprocess. Loopy runs in-process — same JVM, no process overhead, session continuity via ChatMemory.
 
-- No subprocess management overhead
-- Session continuity via ChatMemory (plan+act is two `run()` calls)
-- Direct access to Spring AI ChatModel — swap models in one line
-- Token/cost metrics without parsing CLI output
-- No agent-journal dependency for exhaust capture
+**Not vendoring MiniAgent**: We own Loopy. Depending on it directly means when Wiggum memory lands, or when tools improve, the experiment gets those upgrades for free. No code to copy and maintain.
 
-The AgentClient wrapper for Loopy is a separate concern — useful for Spring AI Bench ("bring your agent") but not needed for this experiment. Build it later when bench needs it.
+**Not subprocess (`loopy -p`)**: Works for single-shot but awkward for plan+act (two prompts, one session). Programmatic API is cleaner and gives us direct access to result metrics.
+
+The `LoopyAgent` API also serves as the future seam for an AgentClient wrapper — useful later for Spring AI Bench ("bring your agent") but not needed for this experiment.
 
 ---
 
