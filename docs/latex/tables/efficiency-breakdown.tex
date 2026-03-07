@@ -1,0 +1,24 @@
+\begin{table}[t]
+\centering
+\caption{Efficiency breakdown per variant (higher is better, except tokens/duration)}
+\label{tab:efficiency-breakdown}
+\small
+\begin{tabular}{lrrrrlll}
+\toprule
+ Agent:Model           &   Build Err &   Cost Eff &   Recovery &   Composite & Avg Out Tok   & Avg Think Tok   & Avg Duration   \\
+\midrule
+ CC:Sonnet (naive)     &        0.9  &       0.82 &       0.9  &        0.88 & 11,086        & 2,032           & 221s           \\
+ CC:Sonnet (hardened)  &        0.97 &       0.83 &       0.97 &        0.94 & 9,869         & 1,558           & 216s           \\
+ CC:Sonnet (+3 KB)     &        0.85 &       0.8  &       0.85 &        0.84 & 11,894        & 2,266           & 237s           \\
+ CC:Sonnet (+full KB)  &        0.88 &       0.79 &       0.88 &        0.85 & 11,203        & 1,985           & 334s           \\
+ CC:Sonnet (two-phase) &        0.65 &       0.55 &       0.75 &        0.65 & 26,436        & 4,866           & 508s           \\
+ CC:Sonnet (forge)     &        0    &       0    &       0.62 &        0.17 & 60,528        & 6,854           & 1313s          \\
+ CC:Sonnet (+SAE)      &        0.88 &       0.82 &       0.88 &        0.86 & 8,747         & 1,462           & 313s           \\
+ CC:Haiku              &        0.67 &       0.9  &       0.81 &        0.77 & 25,472        & 3,752           & 294s           \\
+ CC:Haiku (+SAE)       &        0    &       0.9  &       0.62 &        0.41 & 25,680        & 3,676           & 332s           \\
+ Loopy:Sonnet          &        1    &       0.46 &       1    &        0.86 & 10,237        & 0               & 227s           \\
+ Loopy:Haiku           &        1    &       0.49 &       1    &        0.86 & 26,448        & 0               & 330s           \\
+ Loopy:Qwen3           &        1    &       0    &       1    &        0.73 & 24,486        & 0               & 1419s          \\
+\bottomrule
+\end{tabular}
+\end{table}

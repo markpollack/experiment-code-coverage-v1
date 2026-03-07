@@ -1,0 +1,18 @@
+\begin{table}[t]
+\centering
+\caption{T3 practice adherence per item (higher is better)}
+\label{tab:per-item-breakdown}
+\small
+\begin{tabular}{lllllrllrllrl}
+\toprule
+ Item                         & CC:Sonnet (naive)   & CC:Sonnet (hardened)   & CC:Sonnet (+3 KB)   & CC:Sonnet (+full KB)   &   CC:Sonnet (two-phase) & CC:Sonnet (forge)   & CC:Sonnet (+SAE)   &   CC:Haiku & CC:Haiku (+SAE)   & Loopy:Sonnet   &   Loopy:Haiku & Loopy:Qwen3   \\
+\midrule
+ gs-accessing-data-jpa        & 0.60                & 0.70                   & 0.65                & 0.68                   &                    0.73 & ---                 & ---                &       0.4  & ---               & 0.73           &          0.53 & ---           \\
+ gs-messaging-stomp-websocket & 0.50                & 0.60                   & 0.50                & 0.50                   &                    0.5  & ---                 & ---                &       0.43 & ---               & ---            &          0.45 & ---           \\
+ gs-reactive-rest-service     & 0.50                & 0.93                   & 0.70                & 0.90                   &                    0.73 & ---                 & ---                &       0.45 & ---               & ---            &          0.43 & ---           \\
+ gs-rest-service              & 0.67                & 0.88                   & 0.85                & 0.88                   &                    0.88 & ---                 & 0.93               &       0.43 & 0.35              & ---            &          0.45 & nan           \\
+ gs-securing-web              & 0.83                & 0.88                   & 0.78                & 0.78                   &                    0.67 & ---                 & ---                &       0.5  & ---               & ---            &          0.58 & ---           \\
+ spring-petclinic             & ---                 & ---                    & ---                 & ---                    &                    0.8  & 0.95                & ---                &       0.45 & ---               & ---            &        nan    & ---           \\
+\bottomrule
+\end{tabular}
+\end{table}

@@ -1,0 +1,17 @@
+\begin{table}[t]
+\centering
+\caption{Judge cascade results per variant (tier 0--3 + golden)}
+\label{tab:judge-cascade}
+\small
+\begin{tabular}{lllllllllllll}
+\toprule
+ Judge                 & CC:Sonnet (naive)   & CC:Sonnet (hardened)   & CC:Sonnet (+3 KB)   & CC:Sonnet (+full KB)   & CC:Sonnet (two-phase)   & CC:Sonnet (forge)   & CC:Sonnet (+SAE)   & CC:Haiku   & CC:Haiku (+SAE)   & Loopy:Sonnet   & Loopy:Haiku   & Loopy:Qwen3   \\
+\midrule
+ Build Success         & 100\%               & 100\%                  & 100\%               & 100\%                  & 100\%                   & 100\%               & 100\%              & 100\%      & 100\%             & 100\%          & 83\%          & 0\%           \\
+ Coverage Preservation & 100\%               & 100\%                  & 100\%               & 100\%                  & 83\%                    & 0\%                 & 100\%              & 83\%       & 100\%             & 100\%          & 100\%         & nan\%         \\
+ Coverage Improvement  & 100\%               & 100\%                  & 100\%               & 100\%                  & 83\%                    & 0\%                 & 100\%              & 83\%       & 100\%             & 100\%          & 100\%         & nan\%         \\
+ Practice Adherence    & 0.62                & 0.80                   & 0.70                & 0.75                   & 0.72                    & 0.95                & 0.93               & 0.44       & 0.35              & 0.73           & 0.49          & nan           \\
+ Golden Similarity     & nan                 & nan                    & nan                 & 0.68                   & 0.67                    & 0.58                & 0.36               & 0.49       & 0.43              & 0.88           & 0.60          & nan           \\
+\bottomrule
+\end{tabular}
+\end{table}

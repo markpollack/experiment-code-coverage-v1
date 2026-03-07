@@ -1,0 +1,24 @@
+\begin{table}[t]
+\centering
+\caption{Cost and token breakdown per variant}
+\label{tab:cost-analysis}
+\small
+\begin{tabular}{lllllll}
+\toprule
+ Agent:Model           & Total   & Per Item   & In Tok     & Out Tok   & Think Tok   & Duration   \\
+\midrule
+ CC:Sonnet (naive)     & \$4.57  & \$0.91     & 109        & 55,430    & 10,160      & 1513s      \\
+ CC:Sonnet (hardened)  & \$4.17  & \$0.83     & 137        & 49,343    & 7,791       & 1481s      \\
+ CC:Sonnet (+3 KB)     & \$4.98  & \$1.00     & 137        & 59,472    & 11,328      & 1576s      \\
+ CC:Sonnet (+full KB)  & \$5.13  & \$1.03     & 1,119      & 56,017    & 9,924       & 1671s      \\
+ CC:Sonnet (two-phase) & \$16.48 & \$2.75     & 6,953      & 158,614   & 29,197      & 3046s      \\
+ CC:Sonnet (forge)     & \$8.55  & \$8.55     & 96         & 60,528    & 6,854       & 1435s      \\
+ CC:Sonnet (+SAE)      & \$0.92  & \$0.92     & 33         & 8,747     & 1,462       & 391s       \\
+ CC:Haiku              & \$2.88  & \$0.48     & 1,905      & 152,835   & 22,509      & 2271s      \\
+ CC:Haiku (+SAE)       & \$0.48  & \$0.48     & 317        & 25,680    & 3,676       & 370s       \\
+ Loopy:Sonnet          & \$2.72  & \$2.72     & 854,353    & 10,237    & 0           & 314s       \\
+ Loopy:Haiku           & \$15.30 & \$2.55     & 18,336,594 & 158,691   & 0           & 2470s      \\
+ Loopy:Qwen3           & \$5.01  & \$5.01     & 1,547,477  & 24,486    & 0           & 1421s      \\
+\bottomrule
+\end{tabular}
+\end{table}

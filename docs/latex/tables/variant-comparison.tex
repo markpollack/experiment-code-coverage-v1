@@ -1,0 +1,24 @@
+\begin{table}[t]
+\centering
+\caption{Variant comparison (N=1 per cell, sorted by variant progression)}
+\label{tab:variant-comparison}
+\small
+\begin{tabular}{lrlrlrll}
+\toprule
+ Agent:Model           &   N & Pass\%   &   Cov\% & T3   &   Eff & Total   & Per Item   \\
+\midrule
+ CC:Sonnet (naive)     &   5 & 100\%    &    95.6 & 0.62 &  0.88 & \$4.57  & \$0.91     \\
+ CC:Sonnet (hardened)  &   5 & 100\%    &    85.7 & 0.80 &  0.94 & \$4.17  & \$0.83     \\
+ CC:Sonnet (+3 KB)     &   5 & 100\%    &    95.6 & 0.70 &  0.84 & \$4.98  & \$1.00     \\
+ CC:Sonnet (+full KB)  &   5 & 100\%    &    84.9 & 0.75 &  0.85 & \$5.13  & \$1.03     \\
+ CC:Sonnet (two-phase) &   6 & 100\%    &    94.3 & 0.72 &  0.65 & \$16.48 & \$2.75     \\
+ CC:Sonnet (forge)     &   1 & 100\%    &    95.3 & 0.95 &  0.17 & \$8.55  & \$8.55     \\
+ CC:Sonnet (+SAE)      &   1 & 100\%    &    71.4 & 0.93 &  0.86 & \$0.92  & \$0.92     \\
+ CC:Haiku              &   6 & 17\%     &    78.5 & 0.44 &  0.77 & \$2.88  & \$0.48     \\
+ CC:Haiku (+SAE)       &   1 & 0\%      &    71.4 & 0.35 &  0.41 & \$0.48  & \$0.48     \\
+ Loopy:Sonnet          &   1 & 100\%    &    94.6 & 0.73 &  0.86 & \$2.72  & \$2.72     \\
+ Loopy:Haiku           &   6 & 33\%     &    71.4 & 0.49 &  0.86 & \$15.30 & \$2.55     \\
+ Loopy:Qwen3           &   1 & 0\%      &     0   & ---  &  0.73 & \$5.01  & \$5.01     \\
+\bottomrule
+\end{tabular}
+\end{table}

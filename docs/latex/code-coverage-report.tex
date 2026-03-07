@@ -1,0 +1,436 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[margin=1in]{geometry}
+
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{float}
+\usepackage{xcolor}
+\usepackage{colortbl}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{amsmath}
+
+\definecolor{pass}{RGB}{46,204,113}
+\definecolor{fail}{RGB}{231,76,60}
+\definecolor{neutral}{RGB}{155,89,182}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue!60!black,
+    urlcolor=blue!60!black,
+    citecolor=blue!60!black,
+}
+
+\title{Code Coverage Agent: Ablation Study\\
+\large Knowledge injection + structured execution for AI-generated tests}
+\author{Mark Pollack}
+\date{March 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We evaluate the effect of domain knowledge injection and structured execution
+on AI-generated test quality for Spring Boot projects. An AI agent (Claude Sonnet 4.6)
+is given a Spring Boot project with production code and no tests, and asked to write
+a comprehensive JUnit test suite. We compare five variants that progressively add
+capability: prompt quality, domain knowledge files, and a two-phase explore-then-act
+execution pattern. Each variant is evaluated by a four-tier automated judge cascade
+measuring build success, coverage improvement, practice adherence, and similarity
+to expert-written reference tests. On simple projects, a hardened prompt is the
+dominant lever. Knowledge injection and structured execution show no measurable
+benefit on trivial targets but are hypothesized to matter on complex, multi-layer
+applications.
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+%% ==================================================================
+\section{Executive Summary}
+
+Five variants progressively add capability: a naive prompt (control), a hardened
+prompt with testing guidance (variant-a), curated domain knowledge (variant-b),
+full knowledge base (variant-c), and a two-phase explore-then-act execution
+pattern (variant-d).
+
+Key findings from Sweep 001 (5 Spring Getting Started guides, N=1 per cell):
+
+\begin{enumerate}
+  \item A \textbf{hardened prompt} is the single biggest lever --- control fails 1/5 items; all other variants pass 100\%.
+  \item All improved variants perform \textbf{similarly on simple projects} --- T3 adherence ranges 0.70--0.76, indistinguishable from noise at N=1.
+  \item Two-phase execution costs \textbf{2$\times$} with no measurable benefit on simple targets.
+  \item Coverage is a \textbf{ceiling}, not a differentiator --- 85--95\% across all variants.
+  \item Golden similarity shows a \textbf{possible KB signal} on JPA and security items.
+\end{enumerate}
+
+\input{tables/variant-comparison}
+
+%% ==================================================================
+\section{Experimental Design}
+
+\subsection{Task}
+
+Given a Spring Boot project with production code and no tests, generate a
+comprehensive JUnit test suite targeting $\geq$80\% line coverage. The agent
+operates in a fresh workspace with the project source, a prompt, and optionally
+a set of domain knowledge files. It has full tool access: file reading/writing,
+shell execution (compilation, test runs), and iterative repair.
+
+The agent is Claude Sonnet 4.6. Single-phase variants (control through variant-c)
+are invoked via \texttt{AgentClient} from the Spring AI Claude Agent library,
+which provides a one-shot request--response pattern. Two-phase variant-d uses
+\texttt{ClaudeSyncClient} from the Claude Agent SDK Java directly, because
+\texttt{AgentClient} does not support session continuity --- variant-d needs
+the explore phase's context preserved in memory for the act phase, which requires
+two turns within the same Claude Code session.
+
+In all cases, each invocation is self-contained: the agent reads the project,
+writes tests, compiles, runs, checks coverage, and iterates until satisfied
+or the timeout expires.
+
+\subsection{Variants}
+
+The five variants form a progressive ablation --- each adds one lever on top
+of the previous:
+
+\begin{table}[H]
+\centering
+\caption{Variant definitions}
+\label{tab:variants}
+\small
+\begin{tabular}{@{}llllp{5cm}@{}}
+\toprule
+\textbf{Variant} & \textbf{Prompt} & \textbf{Knowledge} & \textbf{Phase} & \textbf{What changes} \\
+\midrule
+control   & v0-naive    & none          & single    & Minimal instructions: ``write tests for this project'' \\
+variant-a & v1-hardened & none          & single    & Detailed testing guidance: slice annotations, assertion patterns, iteration protocol \\
+variant-b & v2-with-kb  & 3 KB files    & single    & Adds 3 curated knowledge files (coverage fundamentals, JaCoCo patterns, Spring test slices) \\
+variant-c & v2-with-kb  & full KB tree  & single    & Adds entire knowledge base (8 cheatsheets via index.md router) \\
+variant-d & v3-explore + v3-act & full KB & two-phase & Two separate turns: first explore the project and KB, then write tests \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Scoring: Four Dimensions}
+\label{sec:scoring}
+
+Each variant--item result is scored on four independent dimensions.
+Scores are \textbf{not combined} into a single number --- they measure
+different aspects of test quality.
+
+\subsubsection{Line Coverage (JaCoCo)}
+
+Standard JaCoCo line coverage percentage. Measured deterministically by running
+\texttt{mvn clean test jacoco:report} on the agent's workspace after completion.
+Reports both baseline (always 0\% since no tests exist initially) and final coverage.
+
+\textbf{Interpretation}: Higher is better, but coverage alone does not measure
+test quality --- a test that calls every method without assertions achieves high
+coverage with no value.
+
+\subsubsection{T3 Practice Adherence (LLM Judge)}
+
+An LLM-based judge (Claude Sonnet 4.6) evaluates the generated test suite against
+six criteria derived from Spring testing best practices:
+
+\begin{enumerate}
+  \item \textbf{Test slice selection} --- Does the test use the appropriate Spring test annotation (\texttt{@WebMvcTest}, \texttt{@DataJpaTest}, etc.) rather than \texttt{@SpringBootTest} everywhere?
+  \item \textbf{Assertion quality} --- Are assertions specific and domain-aware (e.g., checking actual field values) rather than trivial (\texttt{assertNotNull})?
+  \item \textbf{Error and edge case coverage} --- Does the suite test validation failures, missing entities, boundary conditions?
+  \item \textbf{Domain-specific patterns} --- Are Spring-specific testing patterns used correctly (MockMvc for controllers, TestEntityManager for JPA)?
+  \item \textbf{Coverage target selection} --- Does the suite focus on behaviorally significant code rather than trivial getters?
+  \item \textbf{Version-aware patterns} --- Does the suite use APIs appropriate for the detected Spring Boot version (Boot 4.x vs 3.x)?
+\end{enumerate}
+
+Each criterion is scored 0.0--1.0 by the judge with supporting evidence.
+\textbf{T3} is the mean across all six criteria. The rubric is identical for
+all variants --- knowledge files inform the agent's test authorship, not the
+judge's evaluation.
+
+\textbf{Interpretation}: T3 measures \emph{how well} the tests follow expert
+practices, independent of whether they compile or achieve coverage.
+
+\subsubsection{Golden Test Similarity (AST Comparison)}
+
+A deterministic comparison of the agent's test suite against expert-written
+reference (``golden'') tests using JavaParser AST analysis. Five weighted
+dimensions:
+
+\begin{itemize}
+  \item \textbf{Test method coverage} (weight 0.30) --- ratio of reference test methods that have a corresponding agent test
+  \item \textbf{Annotation alignment} (weight 0.20) --- overlap in Spring test annotations used
+  \item \textbf{Assertion style} (weight 0.20) --- ratio of assertion count (agent vs reference)
+  \item \textbf{Import alignment} (weight 0.15) --- overlap in test imports (proxy for testing approach)
+  \item \textbf{Injection pattern} (weight 0.15) --- overlap in injected dependencies (\texttt{@MockitoBean}, \texttt{@Autowired})
+\end{itemize}
+
+\textbf{Interpretation}: Golden similarity measures structural resemblance to
+expert tests. A score of 1.0 means the agent produced tests structurally identical
+to the reference. This is \emph{not} an LLM judge --- it is fully deterministic.
+
+\subsubsection{Efficiency (Agent Behavior)}
+
+Measures how efficiently the agent used its resources. Four weighted sub-metrics:
+
+\begin{itemize}
+  \item \textbf{Build errors} (weight 0.35) --- $1.0 - (\text{failed builds} / \text{total builds})$. An agent that compiles correctly on every attempt scores 1.0.
+  \item \textbf{Cost efficiency} (weight 0.20) --- normalized inverse of total cost. Lower cost = higher score.
+  \item \textbf{Recovery cycles} (weight 0.20) --- $1.0 - (\text{recovery iterations} / \text{total iterations})$. An agent that never needs to fix a broken build scores 1.0.
+  \item \textbf{Tool utilization} (weight 0.25) --- ratio of productive tool calls to total tool calls.
+\end{itemize}
+
+\textbf{Interpretation}: Efficiency measures the agent's operational quality ---
+did it work cleanly, or did it thrash through compile-fix-compile cycles?
+Two agents can produce identical tests but differ dramatically in efficiency.
+
+\subsection{Judge Cascade}
+
+Judges are organized in a four-tier cascade. Lower tiers are binary gate checks;
+higher tiers produce continuous scores. If a lower tier rejects (e.g., build fails),
+higher tiers do not execute.
+
+\begin{enumerate}[label=\textbf{Tier \arabic*:}, leftmargin=3cm]
+  \item[Tier 0:] \textbf{BuildSuccessJudge} --- does the project compile and all tests pass? (binary gate)
+  \item[Tier 1:] \textbf{CoveragePreservationJudge} --- no regression from baseline coverage. (binary gate)
+  \item[Tier 2:] \textbf{CoverageImprovementJudge} + \textbf{GoldenTestComparisonJudge} --- how much did coverage improve? How similar are the tests to expert reference tests? (continuous scores)
+  \item[Tier 3:] \textbf{TestQualityJudge} --- LLM-based practice adherence across 6 criteria. (continuous score)
+\end{enumerate}
+
+\subsection{Agent Execution and Capture}
+
+Each agent invocation is captured via session log parsing (\texttt{SessionLogParser}
+from the agent-journal library). Both \texttt{AgentClient} and \texttt{ClaudeSyncClient}
+produce structured session logs that are parsed into a common \texttt{PhaseCapture}
+record. The captured exhaust includes:
+
+\begin{itemize}
+  \item \textbf{Tool calls}: every file read, write, edit, glob, grep, and bash command
+  \item \textbf{Token usage}: input tokens, output tokens, thinking tokens (extended thinking)
+  \item \textbf{Turn count}: number of agent--environment round trips
+  \item \textbf{Cost}: USD cost per invocation (API pricing)
+  \item \textbf{Duration}: wall-clock time from prompt to final response
+  \item \textbf{Phase count}: 1 for single-phase variants, 2 for variant-d (explore + act)
+\end{itemize}
+
+For two-phase variant-d, both phases run in the same \texttt{ClaudeSyncClient}
+session --- \texttt{client.connect(explorePrompt)} followed by
+\texttt{client.query(actPrompt)}. The explore phase's full context (tool
+results, reasoning) is preserved in the session for the act phase.
+Each phase's exhaust is captured separately via \texttt{SessionLogParser.parse()}.
+
+\subsection{Dataset}
+
+\textbf{Sweep 001}: 5 Spring Getting Started guides (bucket A --- simple).
+
+\begin{table}[H]
+\centering
+\caption{Dataset items --- Sweep 001}
+\label{tab:dataset}
+\small
+\begin{tabular}{@{}llrl@{}}
+\toprule
+\textbf{Item} & \textbf{Description} & \textbf{Classes} & \textbf{Complexity} \\
+\midrule
+gs-rest-service            & Single REST controller + record     & 2  & Trivial \\
+gs-accessing-data-jpa      & JPA entity + repository             & 2  & Trivial \\
+gs-securing-web            & MVC + Spring Security config        & 3  & Simple \\
+gs-reactive-rest-service   & Reactive REST handler               & 2  & Trivial \\
+gs-messaging-stomp-websocket & WebSocket STOMP controller        & 2  & Simple \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Each item has 1--3 golden reference test files written by domain experts,
+used for the golden similarity comparison.
+
+\textbf{Sweep 002} (planned): Spring Pet Clinic (bucket B --- multi-layer,
+15+ production classes, form-based MVC, JPA entity relationships, validation,
+Testcontainers integration tests, 17 golden reference test files).
+
+%% ==================================================================
+\section{Results: Getting Started Guides}
+
+\subsection{Variant Comparison}
+
+\input{tables/judge-cascade}
+
+All variants except control pass the binary gate checks (Tier 0--1) on all items.
+Control fails on \texttt{gs-messaging-stomp-websocket} (build failure).
+Coverage improvement is uniformly high (Tier 2) because the baseline is always
+0\% and the agent consistently achieves 80--100\%.
+
+The discriminating metrics are T3 practice adherence and golden similarity,
+which show variance across variants.
+
+\subsection{Per-Item Breakdown}
+
+\input{tables/per-item-breakdown}
+
+No single variant wins on all items. This is consistent with stochastic
+variation at N=1 rather than a systematic advantage for any variant.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.85\textwidth]{figures/per-item-bars.pdf}
+\caption{T3 practice adherence by item and variant. Per-item variance is high;
+no variant consistently dominates.}
+\label{fig:per-item-bars}
+\end{figure}
+
+\subsection{Growth Story}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.85\textwidth]{figures/growth-story.pdf}
+\caption{Score progression as levers are added. The jump from control to
+variant-a (hardened prompt) is the largest improvement. Subsequent levers
+show diminishing returns on simple projects.}
+\label{fig:growth-story}
+\end{figure}
+
+\subsection{Efficiency and Agent Behavior}
+
+\input{tables/efficiency-breakdown}
+
+Efficiency reveals a different story than quality scores. All single-phase
+variants achieve similar quality, but their operational behavior differs:
+
+\begin{itemize}
+  \item \textbf{Build error rate}: variant-a scores highest (1.0 on most items) ---
+  the hardened prompt's compilation-first iteration protocol reduces wasted cycles.
+  Control and variant-d both show more build failures.
+
+  \item \textbf{Cost efficiency}: Single-phase variants cost \$4--5 per sweep.
+  Variant-d costs \$8.39 (2$\times$) because two Claude sessions are invoked
+  per item. The explore phase adds context but also adds cost.
+
+  \item \textbf{Token usage}: Variant-d generates the most output tokens
+  (explore phase produces analysis text that is never directly used in tests).
+  Knowledge-injected variants (b, c) use slightly more input tokens
+  (reading KB files) but similar output tokens to variant-a.
+
+  \item \textbf{Duration}: Single-phase variants complete in 2--5 minutes per item.
+  Variant-d takes 5--10 minutes. Pet Clinic smoke test took 17 minutes for a single
+  variant-a run --- complex projects will need longer timeouts.
+\end{itemize}
+
+\subsection{Cost Analysis}
+
+\input{tables/cost-analysis}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.7\textwidth]{figures/cost-quality.pdf}
+\caption{Cost vs.\ quality trade-off. Variant-d (two-phase) costs 2$\times$ without
+measurable quality improvement on simple targets. The efficient frontier is variant-a
+(best quality-per-dollar).}
+\label{fig:cost-quality}
+\end{figure}
+
+%% ==================================================================
+\section{Results: Pet Clinic}
+
+\textit{Sweep 002 in progress --- results pending.}
+
+Smoke test (variant-a on spring-petclinic):
+\begin{itemize}
+  \item Line coverage: 93.6\% (277/296 lines)
+  \item T3 practice adherence: 0.87
+  \item Golden similarity: 0.66
+  \item Cost: \$4.19
+  \item Duration: 17 minutes (vs 2--3 minutes for guides)
+  \item 60 test methods generated (reference has 59)
+\end{itemize}
+
+Full sweep (variant-a, variant-b, variant-d) will test whether knowledge injection
+and structured execution provide measurable benefit on a complex, multi-layer project.
+
+%% ==================================================================
+\section{Analysis}
+
+\subsection{Lever Ordering}
+
+On simple projects, the dominant lever is prompt quality. The progression is:
+\begin{enumerate}
+  \item Hardened prompt ($+$0.10 T3 over naive baseline)
+  \item Knowledge injection ($+$0.00--0.05 T3, within noise at N=1)
+  \item Two-phase execution ($+$0.00 T3, $+$100\% cost)
+\end{enumerate}
+
+The hypothesis is that this ordering changes on complex projects where the
+model cannot infer domain-specific testing patterns from context alone.
+
+\subsection{Coverage as a Ceiling}
+
+Coverage percentage is not useful for variant comparison on simple projects.
+Three of five items show identical coverage across all variants (85--95\%).
+The projects are too simple --- a single REST controller can be fully covered
+by 2--3 test methods. Coverage becomes more discriminating on larger projects
+(the Pet Clinic smoke test produced 93.6\% from significantly more code).
+
+\subsection{Efficiency vs.\ Quality}
+
+The efficiency dimension reveals that agents can produce equivalent test quality
+through very different execution paths. Variant-a achieves the best
+quality-per-dollar: highest efficiency score (0.94) with competitive T3 (0.71)
+at the lowest cost (\$4.06). Variant-d spends 2$\times$ and gets no measurable
+quality improvement on simple targets.
+
+This suggests that on trivial tasks, additional ``thinking time'' (explore phase)
+and ``reference material'' (knowledge base) are wasted effort --- the model already
+knows enough. The question is where the complexity threshold lies.
+
+\subsection{Limitations}
+
+\begin{itemize}
+  \item \textbf{N=1 per cell}: Every score is a single observation. Differences of $\sim$0.05 are indistinguishable from noise.
+  \item \textbf{Simple dataset}: All items are single-layer, 1--3 class projects. Deliberately below the complexity threshold where knowledge should matter.
+  \item \textbf{Same model}: All variants use Claude Sonnet 4.6. Cross-model comparison not yet tested.
+  \item \textbf{No repeated trials}: Stochastic variation in LLM outputs means a single run may not represent typical behavior.
+  \item \textbf{T3 is LLM-judged}: The practice adherence score comes from an LLM, which introduces its own noise. Golden similarity (AST-based) is deterministic but measures structure, not behavior.
+\end{itemize}
+
+%% ==================================================================
+\section{Discussion}
+
+The central thesis is:
+
+\[
+\textit{knowledge} + \textit{structured execution} > \textit{model alone}
+\]
+
+Sweep 001 on simple projects provides the \textbf{null condition}: when the task
+is trivial, the model alone (with a good prompt) is sufficient. Knowledge injection
+adds cost without measurable benefit. The two-phase pattern adds both cost and
+complexity.
+
+Sweep 001 is necessary but not sufficient to validate the thesis. The interesting
+question is whether results change on complex targets. Pet Clinic (15+ classes,
+4 architectural layers, form-based MVC, JPA entity relationships, validation,
+Testcontainers) is designed to test exactly this.
+
+If knowledge variants outperform on Pet Clinic but not on simple guides, the thesis
+holds: \textbf{knowledge investment is justified when task complexity exceeds what
+the model can infer from context alone}. If they don't, we learn that model
+capability has grown past the point where curated knowledge matters --- at least
+for Spring Boot testing.
+
+%% ==================================================================
+\section{Conclusion}
+
+A hardened prompt is the minimum viable intervention for AI-generated test quality.
+On simple Spring Boot projects, additional knowledge injection and structured
+execution provide no measurable improvement at 2$\times$ the cost.
+
+The experiment infrastructure --- automated judge cascade, golden test comparison,
+efficiency tracking, and agent exhaust capture --- is validated and ready for
+harder targets. Next: Spring Pet Clinic (complex target) and cross-model comparison
+(knowledge on a cheaper model vs.\ a more capable model without knowledge).
+
+\end{document}
