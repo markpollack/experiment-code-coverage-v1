@@ -12,6 +12,7 @@
 \usepackage{hyperref}
 \usepackage{enumitem}
 \usepackage{subcaption}
+\usepackage{amsmath}
 
 \hypersetup{
     colorlinks=true,
@@ -27,8 +28,31 @@
 \begin{document}
 \maketitle
 
+\begin{abstract}
+We evaluate the effect of prompt engineering, domain knowledge injection,
+structured execution, model selection, and agent framework on AI-generated
+test quality for Spring Boot projects. Eleven variants are tested across
+two agent frameworks (Claude Code CLI and a Spring AI agent loop), three
+models (Claude Sonnet 4.6, Claude Haiku 4.5, Qwen3-Coder 30B), and
+progressive knowledge treatments including a Stable Analysis Envelope (SAE)
+--- a pre-computed project report with copy-paste import blocks.
+Each variant is evaluated by a four-tier automated judge cascade measuring
+build success, coverage preservation, practice adherence across six criteria,
+and structural similarity to expert-written reference tests.
+On simple projects, a hardened prompt is the dominant lever (+29\% quality,
+same model). Knowledge amplifies capable models (Sonnet + SAE: T3=0.93)
+but cannot lift weak ones (Haiku + SAE: T3=0.35). Below a model capability
+floor, no amount of tooling or knowledge helps. Structured two-phase
+execution adds cost on trivial targets but achieves the highest quality on
+complex multi-layer applications (Pet Clinic plan/act: T3=0.95). The model
+determines \emph{whether it works}; the framework determines \emph{what it costs}.
+\end{abstract}
+
+\tableofcontents
+\newpage
+
 %% ==================================================================
-\section{Setup}
+\section{Experimental Design}
 
 \textbf{Task}: Given a Spring Boot project with production code and \emph{no tests},
 generate a JUnit test suite targeting $\geq$80\% line coverage.
@@ -69,10 +93,119 @@ build success (T0), coverage preservation (T1),
 coverage improvement + golden test similarity (T2),
 LLM practice adherence across 6 criteria (T3).
 
+\subsection{Scoring: Four Dimensions}
+\label{sec:scoring}
+
+Each variant--item result is scored on four independent dimensions.
+Scores are \textbf{not combined} into a single number --- they measure
+different aspects of test quality.
+
+\subsubsection{Line Coverage (JaCoCo)}
+
+Standard JaCoCo line coverage percentage. Measured deterministically by running
+\texttt{mvn clean test jacoco:report} on the agent's workspace after completion.
+Reports both baseline (always 0\% since no tests exist initially) and final coverage.
+
+\textbf{Interpretation}: Higher is better, but coverage alone does not measure
+test quality --- a test that calls every method without assertions achieves high
+coverage with no value.
+
+\subsubsection{T3 Practice Adherence (LLM Judge)}
+
+An LLM-based judge (Claude Sonnet 4.6) evaluates the generated test suite against
+six criteria derived from Spring testing best practices:
+
+\begin{enumerate}
+  \item \textbf{Test slice selection} --- Does the test use the appropriate Spring test annotation (\texttt{@WebMvcTest}, \texttt{@DataJpaTest}, etc.) rather than \texttt{@SpringBootTest} everywhere?
+  \item \textbf{Assertion quality} --- Are assertions specific and domain-aware (e.g., checking actual field values) rather than trivial (\texttt{assertNotNull})?
+  \item \textbf{Error and edge case coverage} --- Does the suite test validation failures, missing entities, boundary conditions?
+  \item \textbf{Domain-specific patterns} --- Are Spring-specific testing patterns used correctly (MockMvc for controllers, TestEntityManager for JPA)?
+  \item \textbf{Coverage target selection} --- Does the suite focus on behaviorally significant code rather than trivial getters?
+  \item \textbf{Version-aware patterns} --- Does the suite use APIs appropriate for the detected Spring Boot version (Boot 4.x vs 3.x)?
+\end{enumerate}
+
+Each criterion is scored 0.0--1.0 by the judge with supporting evidence.
+\textbf{T3} is the mean across all six criteria. The rubric is identical for
+all variants --- knowledge files inform the agent's test authorship, not the
+judge's evaluation.
+
+\textbf{Interpretation}: T3 measures \emph{how well} the tests follow expert
+practices, independent of whether they compile or achieve coverage.
+
+\subsubsection{Golden Test Similarity (AST Comparison)}
+
+A deterministic comparison of the agent's test suite against expert-written
+reference (``golden'') tests using JavaParser AST analysis. Five weighted
+dimensions:
+
+\begin{itemize}
+  \item \textbf{Test method coverage} (weight 0.30) --- ratio of reference test methods that have a corresponding agent test
+  \item \textbf{Annotation alignment} (weight 0.20) --- overlap in Spring test annotations used
+  \item \textbf{Assertion style} (weight 0.20) --- ratio of assertion count (agent vs reference)
+  \item \textbf{Import alignment} (weight 0.15) --- overlap in test imports (proxy for testing approach)
+  \item \textbf{Injection pattern} (weight 0.15) --- overlap in injected dependencies (\texttt{@MockitoBean}, \texttt{@Autowired})
+\end{itemize}
+
+\textbf{Interpretation}: Golden similarity measures structural resemblance to
+expert tests. A score of 1.0 means the agent produced tests structurally identical
+to the reference. This is \emph{not} an LLM judge --- it is fully deterministic.
+
+\subsubsection{Efficiency (Agent Behavior)}
+
+Measures how efficiently the agent used its resources. Four weighted sub-metrics:
+
+\begin{itemize}
+  \item \textbf{Build errors} (weight 0.35) --- $1.0 - (\text{failed builds} / \text{total builds})$. An agent that compiles correctly on every attempt scores 1.0.
+  \item \textbf{Cost efficiency} (weight 0.20) --- normalized inverse of total cost. Lower cost = higher score.
+  \item \textbf{Recovery cycles} (weight 0.20) --- $1.0 - (\text{recovery iterations} / \text{total iterations})$. An agent that never needs to fix a broken build scores 1.0.
+  \item \textbf{Tool utilization} (weight 0.25) --- ratio of productive tool calls to total tool calls.
+\end{itemize}
+
+\textbf{Interpretation}: Efficiency measures the agent's operational quality ---
+did it work cleanly, or did it thrash through compile-fix-compile cycles?
+Two agents can produce identical tests but differ dramatically in efficiency.
+
+\subsection{Judge Cascade}
+
+Judges are organized in a four-tier cascade. Lower tiers are binary gate checks;
+higher tiers produce continuous scores. If a lower tier rejects (e.g., build fails),
+higher tiers do not execute.
+
+\begin{enumerate}[label=\textbf{Tier \arabic*:}, leftmargin=3cm]
+  \item[Tier 0:] \textbf{BuildSuccessJudge} --- does the project compile and all tests pass? (binary gate)
+  \item[Tier 1:] \textbf{CoveragePreservationJudge} --- no regression from baseline coverage. (binary gate)
+  \item[Tier 2:] \textbf{CoverageImprovementJudge} + \textbf{GoldenTestComparisonJudge} --- how much did coverage improve? How similar are the tests to expert reference tests? (continuous scores)
+  \item[Tier 3:] \textbf{TestQualityJudge} --- LLM-based practice adherence across 6 criteria. (continuous score)
+\end{enumerate}
+
+\subsection{Agent Execution and Capture}
+
+Each agent invocation is captured via session log parsing (\texttt{SessionLogParser}
+from the agent-journal library). Both \texttt{AgentClient} and \texttt{ClaudeSyncClient}
+produce structured session logs that are parsed into a common \texttt{PhaseCapture}
+record. The captured exhaust includes:
+
+\begin{itemize}
+  \item \textbf{Tool calls}: every file read, write, edit, glob, grep, and bash command
+  \item \textbf{Token usage}: input tokens, output tokens, thinking tokens (extended thinking)
+  \item \textbf{Turn count}: number of agent--environment round trips
+  \item \textbf{Cost}: USD cost per invocation (API pricing)
+  \item \textbf{Duration}: wall-clock time from prompt to final response
+  \item \textbf{Phase count}: 1 for single-phase variants, 2 for two-phase (explore + act)
+\end{itemize}
+
+For two-phase variants, both phases run in the same \texttt{ClaudeSyncClient}
+session --- \texttt{client.connect(explorePrompt)} followed by
+\texttt{client.query(actPrompt)}. The explore phase's full context (tool
+results, reasoning) is preserved in the session for the act phase.
+Each phase's exhaust is captured separately via \texttt{SessionLogParser.parse()}.
+
 %% ==================================================================
 \section{Results at a Glance}
 
 \input{tables/variant-comparison}
+
+\input{tables/judge-cascade}
 
 \input{tables/cost-analysis}
 
@@ -386,7 +519,51 @@ Much shorter sequences; simple projects don't discriminate between variants.}
 \end{figure}
 
 %% ==================================================================
-\section{Summary}
+\section{Discussion}
+
+The central thesis is:
+
+\[
+\textit{knowledge} + \textit{structured execution} > \textit{model alone}
+\]
+
+The simple Spring guides provide the \textbf{null condition}: when the task
+is trivial, the model alone (with a good prompt) is sufficient. Knowledge injection
+adds cost without measurable benefit. The two-phase pattern adds both cost and
+complexity.
+
+The Pet Clinic results validate the thesis from the positive direction.
+The plan/act two-phase variant achieves T3=0.95 on a complex, multi-layer
+application --- the highest quality score in the experiment. Structured execution
+pays off when the task exceeds what the model can solve in a single pass.
+
+The SAE finding adds a nuance: knowledge amplifies capable models
+(Sonnet + SAE: T3=0.93) but cannot lift weak ones (Haiku + SAE: T3=0.35).
+This means the thesis should be read as \textbf{knowledge investment is justified
+when (a) the model is above the capability floor and (b) task complexity exceeds
+what the model can infer from context alone}. Below the model floor, no amount
+of knowledge, tooling, or structured execution helps.
+
+The cross-model and cross-framework comparisons confirm that model capability
+and framework engineering are independent axes. The model determines
+\emph{whether it works}; the framework determines \emph{what it costs}.
+Loopy:Sonnet matches CC:Sonnet on quality but costs 3$\times$ more.
+Context compaction (21$\times$ token reduction) closes most of the gap,
+suggesting that framework cost is an engineering problem, not a fundamental one.
+
+\subsection{Limitations}
+
+\begin{itemize}
+  \item \textbf{N=1 per cell}: Every score is a single observation. Differences of $\sim$0.05 are indistinguishable from stochastic variation.
+  \item \textbf{Simple dataset dominates}: 5 of 6 items are single-layer, 1--3 class projects. Pet Clinic is the only complex target.
+  \item \textbf{Multiple models tested, but coverage is uneven}: Sonnet was tested across all knowledge treatments; Haiku and Qwen3 only on a subset. Cross-model comparisons are directional, not controlled.
+  \item \textbf{No repeated trials}: Stochastic variation in LLM outputs means a single run may not represent typical behavior.
+  \item \textbf{T3 is LLM-judged}: The practice adherence score comes from an LLM, which introduces its own noise. Golden similarity (AST-based) is deterministic but measures structure, not behavior.
+  \item \textbf{Anthropic models only for agent}: All Claude Code variants use Anthropic models. Qwen3 was tested only through Loopy. Direct comparison of local vs.\ API models on the same framework is not yet available.
+\end{itemize}
+
+%% ==================================================================
+\section{Conclusion}
 
 \begin{enumerate}
   \item \textbf{Prompt engineering is the biggest lever --- and the cheapest.}
@@ -410,5 +587,14 @@ Much shorter sequences; simple projects don't discriminate between variants.}
         Pet Clinic with plan/act: T3=0.95. Two-phase adds 2$\times$ cost on simple
         targets but pays off on complex ones.
 \end{enumerate}
+
+The experiment infrastructure --- automated four-tier judge cascade, golden test
+AST comparison, efficiency tracking, agent journal capture with thinking-block
+analysis, and Markov chain behavioral modeling --- is validated and reusable.
+The dataset, prompts, knowledge base, judge rubrics, and all raw results are
+published for reproducibility. Next steps: larger N for statistical power,
+harder targets (multi-module projects, legacy codebases), and cross-model
+controlled comparisons where the same knowledge treatments are applied to
+multiple models on the same framework.
 
 \end{document}
